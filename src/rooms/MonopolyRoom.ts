@@ -5,6 +5,12 @@ import {
 } from "../shared/board";
 import type { JoinOptions } from "../shared/messages";
 import { CHANCE, COMMUNITY_CHEST, shuffle, type Card, type CardEffects } from "../game/cards";
+import { move, moveBackwards } from "../game/BoardGraph";
+import { Queue, CircularQueue } from "../structures/Queue";
+import { Stack } from "../structures/Stack";
+import { HashTable } from "../structures/HashTable";
+import { Leaderboard } from "../persistence/Leaderboard";
+import { bubbleSort } from "../structures/sorting";
 import {
   buildError, houseAndHotelCount, mortgageValue, netWorth, rentFor, sellError, unmortgageCost,
 } from "../game/rules";
@@ -15,9 +21,36 @@ const RECONNECT_GRACE_SECONDS = 120;
 export class MonopolyRoom extends Room<{ state: GameState }> {
   maxClients = 6;
 
-  /** Server-only. Never added to the schema, so clients cannot read the deck order. */
-  private chanceDeck: Card[] = [];
-  private chestDeck: Card[] = [];
+  /**
+   * Server-only. Never added to the schema, so clients cannot read the deck order.
+   *
+   * Draw piles are QUEUES because Monopoly draws from the top and returns the used
+   * card to the bottom — first in, first out. Discards go on a STACK, since the
+   * most recently used card sits on top of the pile and the whole pile is turned
+   * over (reshuffled) when the draw queue empties.
+   */
+  private chanceDeck = new Queue<Card>();
+  private chestDeck = new Queue<Card>();
+  private chanceDiscard = new Stack<Card>();
+  private chestDiscard = new Stack<Card>();
+
+  /**
+   * Turn order as a circular queue: ending a turn dequeues the current player and
+   * enqueues them at the back, so the rotation repeats with no wrapping index.
+   */
+  private turnQueue = new CircularQueue<string>();
+
+  /**
+   * The server's own player index, keyed by session ID. Every incoming message
+   * needs this lookup, and the hash table gives it in O(1) average.
+   *
+   * The MapSchema in GameState is the NETWORK representation — it exists to be
+   * synchronised to clients. This is the engine's own index; game logic reads
+   * from here so it does not depend on the transport layer's data structures.
+   */
+  private playerIndex = new HashTable<Player>();
+
+  private leaderboard = new Leaderboard();
 
   onCreate(options: JoinOptions) {
     this.setState(new GameState());
@@ -32,8 +65,8 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
       p.tile = tile;
       this.state.properties.set(String(tile), p);
     }
-    this.chanceDeck = shuffle(CHANCE);
-    this.chestDeck = shuffle(COMMUNITY_CHEST);
+    for (const card of shuffle(CHANCE)) this.chanceDeck.enqueue(card);
+    for (const card of shuffle(COMMUNITY_CHEST)) this.chestDeck.enqueue(card);
 
     this.onMessage("start", (client) => this.handleStart(client));
     this.onMessage("roll", (client) => this.handleRoll(client));
@@ -68,6 +101,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     player.colour = TOKEN_COLOURS[this.state.players.size % TOKEN_COLOURS.length];
     player.isHost = this.state.players.size === 0;
     this.state.players.set(client.sessionId, player);
+    this.playerIndex.set(client.sessionId, player);
     this.log(`${player.name} joined.`);
   }
 
@@ -99,6 +133,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     if (!player) return;
     this.log(`${player.name} left.`);
     this.state.players.delete(sessionId);
+    this.playerIndex.delete(sessionId);
     // Hand the host badge to whoever is left.
     if (player.isHost) {
       const next = [...this.state.players.values()][0];
@@ -135,8 +170,8 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     if (this.state.phase !== "lobby") return this.deny(client, "Already started.");
     if (this.state.players.size < 2) return this.deny(client, "You need at least two players.");
 
-    for (const id of shuffle([...this.state.players.keys()])) this.state.turnOrder.push(id);
-    this.state.currentTurn = 0;
+    this.turnQueue = new CircularQueue(shuffle([...this.state.players.keys()]));
+    this.publishTurnOrder();
     this.state.phase = "rolling";
     this.log(`Game started. ${this.name(this.state.currentPlayerId)} goes first.`);
   }
@@ -209,12 +244,13 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.state.doubles = 0;
     this.state.pendingPurchase = -1;
 
-    const order = this.state.turnOrder;
-    for (let step = 1; step <= order.length; step++) {
-      const idx = (this.state.currentTurn + step) % order.length;
-      const candidate = this.state.players.get(order[idx]);
+    // Rotate the queue until an active player reaches the front. Bounded by the
+    // queue length so an all-bankrupt table cannot loop forever.
+    for (let attempts = 0; attempts < this.turnQueue.size; attempts++) {
+      const nextId = this.turnQueue.rotate();
+      const candidate = nextId ? this.playerIndex.get(nextId) : undefined;
       if (candidate && !candidate.bankrupt) {
-        this.state.currentTurn = idx;
+        this.publishTurnOrder();
         this.state.phase = "rolling";
         this.log(`${candidate.name}'s turn.`);
         return;
@@ -223,16 +259,28 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.checkForWinner();
   }
 
+  /**
+   * Copy the queue's order into the synced schema so clients can see it.
+   * The front of the queue is always the current player, so currentTurn is 0.
+   */
+  private publishTurnOrder() {
+    this.state.turnOrder.splice(0, this.state.turnOrder.length);
+    for (const id of this.turnQueue.toArray()) this.state.turnOrder.push(id);
+    this.state.currentTurn = 0;
+  }
+
   // ---------------------------------------------------------------- movement
 
   /** Move `steps` forward, collecting salary on passing GO, then resolve the tile. */
   private advancePlayer(player: Player, steps: number) {
-    const target = (player.position + steps) % BOARD.length;
-    if (target < player.position) {
+    // Follows `next` pointers around the board ring; passedGo is reported by the
+    // walk itself rather than inferred from comparing index numbers.
+    const result = move(player.position, steps);
+    if (result.passedGo) {
       player.money += GO_SALARY;
       this.log(`${player.name} passed GO and collected £${GO_SALARY}.`);
     }
-    player.position = target;
+    player.position = result.landedOn;
     this.resolveTile(player, steps);
   }
 
@@ -306,13 +354,18 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
   // ---------------------------------------------------------------- cards
 
   private drawCard(player: Player, deck: "chance" | "chest") {
-    const source = deck === "chance" ? this.chanceDeck : this.chestDeck;
-    if (source.length === 0) {
-      const refilled = shuffle(deck === "chance" ? CHANCE : COMMUNITY_CHEST);
-      if (deck === "chance") this.chanceDeck = refilled;
-      else this.chestDeck = refilled;
+    const draw = deck === "chance" ? this.chanceDeck : this.chestDeck;
+    const discard = deck === "chance" ? this.chanceDiscard : this.chestDiscard;
+
+    // Draw pile exhausted: turn the discard stack over, shuffle it, and refill.
+    if (draw.isEmpty()) {
+      const recycled: Card[] = [];
+      while (!discard.isEmpty()) recycled.push(discard.pop()!);
+      for (const card of shuffle(recycled)) draw.enqueue(card);
     }
-    const card = (deck === "chance" ? this.chanceDeck : this.chestDeck).shift()!;
+
+    const card = draw.dequeue()!;
+    discard.push(card);
 
     this.broadcast("card", { deck, text: card.text });
     this.log(`${player.name}: ${card.text}`);
@@ -323,7 +376,9 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     return {
       moveTo: (tile, collectGo) => this.teleport(player, tile, collectGo),
       moveBy: (delta) => {
-        player.position = (player.position + delta + BOARD.length) % BOARD.length;
+        player.position = delta < 0
+          ? moveBackwards(player.position, -delta)
+          : move(player.position, delta).landedOn;
         this.resolveTile(player, this.state.die1 + this.state.die2);
       },
       gain: (amount) => { player.money += amount; },
@@ -395,19 +450,53 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     const creditor = creditorId ? this.state.players.get(creditorId) : undefined;
     if (creditor && player.money > 0) creditor.money += player.money;
     player.money = 0;
+    this.turnQueue.remove((id) => id === playerId);
     this.log(`${player.name} is out of the game.`);
 
+    // Advance the turn if the bankrupt player was holding it, then ALWAYS check
+    // for a winner. Previously nextTurn() short-circuited this: it found the one
+    // remaining player, set the phase back to "rolling", and the game never ended.
     if (this.state.currentPlayerId === playerId) this.nextTurn();
-    else this.checkForWinner();
+    this.checkForWinner();
   }
 
   private checkForWinner() {
+    if (this.state.phase === "lobby" || this.state.phase === "ended") return;
+
     const alive = [...this.state.players.values()].filter((p) => !p.bankrupt);
-    if (alive.length === 1 && this.state.phase !== "lobby") {
+    if (alive.length === 1) {
       this.state.phase = "ended";
       this.state.winnerId = alive[0].id;
       this.log(`${alive[0].name} wins.`);
+      this.recordResult(alive[0]);
+    } else if (alive.length === 0) {
+      // Should be unreachable, but ending with no winner beats hanging forever.
+      this.state.phase = "ended";
+      this.log("Everyone is bankrupt. No winner.");
     }
+  }
+
+  /**
+   * Write the finished game to the leaderboard file.
+   *
+   * Final standings are ranked with bubble sort: at most 6 entries, sorted once,
+   * where the O(n^2) cost is irrelevant next to the file write that follows.
+   */
+  private recordResult(winner: Player) {
+    const standings = bubbleSort(
+      [...this.state.players.values()].map((p) => ({
+        name: p.name,
+        netWorth: p.bankrupt ? 0 : netWorth(this.state, p.id),
+      })),
+      (a, b) => b.netWorth - a.netWorth,
+    );
+
+    this.leaderboard.recordMatch({
+      playedAt: new Date().toISOString(),
+      roomCode: this.state.roomCode,
+      winner: winner.name,
+      standings,
+    });
   }
 
   // ---------------------------------------------------------------- player actions
@@ -514,8 +603,9 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
 
   // ---------------------------------------------------------------- helpers
 
+  /** O(1) average through the hash table rather than the network schema map. */
   private name(id: string): string {
-    return this.state.players.get(id)?.name ?? "the bank";
+    return this.playerIndex.get(id)?.name ?? "the bank";
   }
 
   private log(line: string) {

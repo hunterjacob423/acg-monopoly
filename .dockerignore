@@ -5,3 +5,4 @@ client/dist
 .git
 .env
 .DS_Store
+data

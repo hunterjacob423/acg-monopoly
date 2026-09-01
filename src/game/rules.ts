@@ -101,5 +101,11 @@ export function houseAndHotelCount(state: GameState, playerId: string): { houses
 }
 
 export const mortgageValue = (tile: number) => Math.floor((BOARD[tile].price ?? 0) / 2);
-/** Lifting a mortgage costs the loan plus 10% interest. */
-export const unmortgageCost = (tile: number) => Math.ceil(mortgageValue(tile) * 1.1);
+/**
+ * Lifting a mortgage costs the loan plus 10% interest.
+ *
+ * Written as `* 11 / 10` rather than `* 1.1` because 1.1 has no exact binary
+ * representation: 200 * 1.1 evaluates to 220.00000000000003, and rounding that
+ * up charges the player an extra pound.
+ */
+export const unmortgageCost = (tile: number) => Math.ceil((mortgageValue(tile) * 11) / 10);

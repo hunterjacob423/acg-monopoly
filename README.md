@@ -94,6 +94,46 @@ progress is never shut down underneath you. **Keep it at one machine** — with 
 machines, matchmaking would need Redis, and players entering the same room code could land
 on different machines and never see each other.
 
+## A-level data structures and algorithms
+
+Each structure is written from scratch in `src/structures/` and does a real job in
+the game, rather than existing to be demonstrated.
+
+| Structure | Where it is used | Why that one |
+|---|---|---|
+| Circular linked list | `game/BoardGraph.ts` — the board itself | Squares physically lead to the next; Mayfair leads back to GO. Passing GO falls out of the walk instead of needing index comparisons |
+| Circular queue | `MonopolyRoom.turnQueue` | Ending a turn dequeues the player and enqueues them at the back; the rotation repeats with no wrapping index |
+| Queue | Chance / Community Chest draw piles | Monopoly returns a used card to the *bottom* of the pile — first in, first out |
+| Stack | Card discard piles, and the event log | The most recent card sits on top; the log is read newest-first, which is pop order |
+| Hash table | `MonopolyRoom.playerIndex` | Every incoming message needs a player lookup by session ID. O(1) average, with separate chaining that reuses the linked list |
+| Binary search tree | `BoardGraph` property-name index | O(log n) lookup by name, and an in-order traversal gives the alphabetical list with no sorting step |
+| Recursion | BST insert/search/traversal/height, `moveRecursive`, `binarySearchRecursive` | The tree is defined recursively; the iterative and recursive forms of movement and binary search sit side by side for comparison |
+| Bubble sort | End-of-game standings (`recordResult`) | At most 6 entries, sorted once. The early-exit pass makes it O(n) when order is unchanged |
+| Insertion sort | Leaderboard inserts, property portfolios | The list is already sorted and one element is out of place — insertion sort's best case |
+| Binary search | `Leaderboard.find` | Records are kept sorted by name, so lookup is O(log n) rather than a linear scan |
+| File handling | `persistence/Leaderboard.ts` | Leaderboard and match history as JSON, surviving restarts. Missing files are a normal first run; corrupt files are survived, not fatal |
+
+### Testing
+
+```
+npm test
+```
+
+62 tests covering every structure, the rent and building rules, board movement, and
+the leaderboard's file handling. Written with Node's built-in test runner, so there
+is no test framework dependency.
+
+Two bugs were found by these tests and fixed: `unmortgageCost` charged a pound too
+much because `200 * 1.1` is `220.00000000000003` in floating point, and a two-player
+game never declared a winner because bankruptcy advanced the turn instead of ending
+the game.
+
+### A note on persistence in production
+
+The leaderboard writes to `data/` inside the container. On Fly with
+`min_machines_running = 0` that directory is lost when the machine stops, so a
+deployed leaderboard needs a Fly volume mounted at `/app/data`. Locally it just works.
+
 ## Not built yet
 
 - **Trades** between players (the fiddliest part; the schema has room for it)

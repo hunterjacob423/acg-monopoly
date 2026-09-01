@@ -3,3 +3,4 @@ build/
 client/dist/
 .env
 .DS_Store
+data/
