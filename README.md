@@ -113,6 +113,12 @@ the game, rather than existing to be demonstrated.
 | Binary search | `Leaderboard.find` | Records are kept sorted by name, so lookup is O(log n) rather than a linear scan |
 | File handling | `persistence/Leaderboard.ts` | Leaderboard and match history as JSON, surviving restarts. Missing files are a normal first run; corrupt files are survived, not fatal |
 
+### Design documentation
+
+Full design documentation — architecture, class relationships, data dictionary, the
+turn state machine, algorithm analysis and the test plan — is in
+[`docs/design.html`](docs/design.html). Open it in a browser.
+
 ### Testing
 
 ```
