@@ -106,7 +106,7 @@ the game, rather than existing to be demonstrated.
 | Queue | Chance / Community Chest draw piles | Monopoly returns a used card to the *bottom* of the pile — first in, first out |
 | Stack | Card discard piles | The most recent card sits on top; the pile is popped one card at a time to refill the draw queue when it empties |
 | Hash table | `MonopolyRoom.playerIndex` | Every incoming message needs a player lookup by session ID. O(1) average, with separate chaining that reuses the linked list |
-| Binary search tree | `BoardGraph` property-name index — **built and tested, not yet called by the game** | O(log n) lookup by name, and an in-order traversal gives the alphabetical list with no sorting step. Its consumer is the trade screen, which is not yet built |
+| Binary search tree | Property lookup for the trade screen, via the `searchProperty` message | O(log n) lookup by name, and a prefix search built on the in-order traversal returns matches already alphabetical |
 | Recursion | BST insert/search/traversal/height, `moveRecursive`, `binarySearchRecursive` | The tree is defined recursively; the iterative and recursive forms of movement and binary search sit side by side for comparison |
 | Bubble sort | End-of-game standings (`recordResult`) | At most 6 entries, sorted once. The early-exit pass makes it O(n) when order is unchanged |
 | Insertion sort | Leaderboard inserts, property portfolios | The list is already sorted and one element is out of place — insertion sort's best case |
@@ -125,8 +125,8 @@ turn state machine, algorithm analysis and the test plan — is in
 npm test
 ```
 
-62 tests covering every structure, the rent and building rules, board movement, and
-the leaderboard's file handling. Written with Node's built-in test runner, so there
+76 tests covering every structure, the rent and building rules, board movement, and
+trading, and the leaderboard's file handling. Written with Node's built-in test runner, so there
 is no test framework dependency.
 
 Two bugs were found by these tests and fixed: `unmortgageCost` charged a pound too
@@ -142,7 +142,6 @@ deployed leaderboard needs a Fly volume mounted at `/app/data`. Locally it just 
 
 ## Not built yet
 
-- **Trades** between players (the fiddliest part; the schema has room for it)
 - **Auctions** when a player declines a property — it currently stays with the bank
 - Free Parking pot, house/hotel supply limits (32/12), and the even-build rule across
   *selling* back to the bank in a shortage

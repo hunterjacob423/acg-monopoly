@@ -1,18 +1,19 @@
 import { Room, Client, CloseCode } from "@colyseus/core";
-import { GameState, Player, Property } from "./schema/GameState";
+import { GameState, Player, Property, Trade } from "./schema/GameState";
 import {
   BOARD, GO_SALARY, JAIL_FINE, JAIL_INDEX, OWNABLE, STARTING_MONEY,
 } from "../shared/board";
 import type { JoinOptions } from "../shared/messages";
 import { CHANCE, COMMUNITY_CHEST, shuffle, type Card, type CardEffects } from "../game/cards";
-import { move, moveBackwards } from "../game/BoardGraph";
+import { move, moveBackwards, searchByPrefix, findByName } from "../game/BoardGraph";
 import { Queue, CircularQueue } from "../structures/Queue";
 import { Stack } from "../structures/Stack";
 import { HashTable } from "../structures/HashTable";
 import { Leaderboard } from "../persistence/Leaderboard";
 import { bubbleSort } from "../structures/sorting";
 import {
-  buildError, houseAndHotelCount, mortgageValue, netWorth, rentFor, sellError, unmortgageCost,
+  buildError, houseAndHotelCount, mortgageValue, netWorth, rentFor, sellError,
+  tradeError, unmortgageCost, type TradeSide,
 } from "../game/rules";
 
 const TOKEN_COLOURS = ["#e6394a", "#2f7de1", "#22a95b", "#f0a92a", "#9b4fd1", "#16bcc4"];
@@ -79,6 +80,11 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.onMessage("mortgage", (client, msg: { tile: number }) => this.handleMortgage(client, msg?.tile));
     this.onMessage("unmortgage", (client, msg: { tile: number }) => this.handleUnmortgage(client, msg?.tile));
     this.onMessage("declareBankruptcy", (client) => this.handleBankruptcyRequest(client));
+    this.onMessage("proposeTrade", (client, msg) => this.handleProposeTrade(client, msg));
+    this.onMessage("acceptTrade", (client, msg: { tradeId: string }) => this.handleAcceptTrade(client, msg?.tradeId));
+    this.onMessage("rejectTrade", (client, msg: { tradeId: string }) => this.handleTradeRefusal(client, msg?.tradeId, "rejected"));
+    this.onMessage("cancelTrade", (client, msg: { tradeId: string }) => this.handleTradeRefusal(client, msg?.tradeId, "withdrew"));
+    this.onMessage("searchProperty", (client, msg: { query: string }) => this.handleSearchProperty(client, msg?.query));
   }
 
   // ---------------------------------------------------------------- join / leave
@@ -134,6 +140,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.log(`${player.name} left.`);
     this.state.players.delete(sessionId);
     this.playerIndex.delete(sessionId);
+    this.clearTradesFor(sessionId);
     // Hand the host badge to whoever is left.
     if (player.isHost) {
       const next = [...this.state.players.values()][0];
@@ -451,6 +458,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     if (creditor && player.money > 0) creditor.money += player.money;
     player.money = 0;
     this.turnQueue.remove((id) => id === playerId);
+    this.clearTradesFor(playerId);
     this.log(`${player.name} is out of the game.`);
 
     // Advance the turn if the bankrupt player was holding it, then ALWAYS check
@@ -601,6 +609,126 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.bankrupt(player.id, "");
   }
 
+  // ---------------------------------------------------------------- trading
+
+  private nextTradeId = 1;
+
+  private handleProposeTrade(client: Client, msg: {
+    toId: string; offerTiles: number[]; requestTiles: number[];
+    offerMoney: number; requestMoney: number;
+  }) {
+    const proposer = this.playerIndex.get(client.sessionId);
+    if (!proposer) return;
+    if (this.state.phase === "lobby" || this.state.phase === "ended") {
+      return this.deny(client, "You can only trade during a game.");
+    }
+
+    // Never trust the shape of an incoming message: it arrives as JSON from a
+    // client we do not control, so coerce it before the rules ever see it.
+    const from: TradeSide = {
+      playerId: proposer.id,
+      tiles: toTileList(msg?.offerTiles),
+      money: Math.floor(Number(msg?.offerMoney) || 0),
+    };
+    const to: TradeSide = {
+      playerId: String(msg?.toId ?? ""),
+      tiles: toTileList(msg?.requestTiles),
+      money: Math.floor(Number(msg?.requestMoney) || 0),
+    };
+
+    const error = tradeError(this.state, from, to);
+    if (error) return this.deny(client, error);
+
+    // One open offer per pair at a time, so a player cannot be buried in offers.
+    const existing = [...this.state.trades.values()].find(
+      (t) => (t.fromId === from.playerId && t.toId === to.playerId) ||
+             (t.fromId === to.playerId && t.toId === from.playerId));
+    if (existing) return this.deny(client, "There is already an offer open with that player.");
+
+    const trade = new Trade();
+    trade.id = `t${this.nextTradeId++}`;
+    trade.fromId = from.playerId;
+    trade.toId = to.playerId;
+    for (const t of from.tiles) trade.offerTiles.push(t);
+    for (const t of to.tiles) trade.requestTiles.push(t);
+    trade.offerMoney = from.money;
+    trade.requestMoney = to.money;
+    this.state.trades.set(trade.id, trade);
+
+    this.log(`${proposer.name} offered ${this.name(to.playerId)} a trade.`);
+  }
+
+  private handleAcceptTrade(client: Client, tradeId: string) {
+    const trade = this.state.trades.get(String(tradeId ?? ""));
+    if (!trade) return this.deny(client, "That offer is no longer open.");
+    if (trade.toId !== client.sessionId) return this.deny(client, "That offer was not made to you.");
+
+    const from: TradeSide = {
+      playerId: trade.fromId,
+      tiles: [...trade.offerTiles],
+      money: trade.offerMoney,
+    };
+    const to: TradeSide = {
+      playerId: trade.toId,
+      tiles: [...trade.requestTiles],
+      money: trade.requestMoney,
+    };
+
+    // Re-validate: the proposer may have spent the cash or built on a property
+    // in the time the offer sat open.
+    const error = tradeError(this.state, from, to);
+    if (error) {
+      this.state.trades.delete(trade.id);
+      return this.deny(client, `That offer is no longer valid — ${error}`);
+    }
+
+    const proposer = this.playerIndex.get(trade.fromId)!;
+    const recipient = this.playerIndex.get(trade.toId)!;
+
+    for (const tile of from.tiles) this.state.properties.get(String(tile))!.ownerId = recipient.id;
+    for (const tile of to.tiles) this.state.properties.get(String(tile))!.ownerId = proposer.id;
+    proposer.money += to.money - from.money;
+    recipient.money += from.money - to.money;
+
+    this.state.trades.delete(trade.id);
+    this.log(`${recipient.name} accepted ${proposer.name}'s trade.`);
+  }
+
+  private handleTradeRefusal(client: Client, tradeId: string, verb: "rejected" | "withdrew") {
+    const trade = this.state.trades.get(String(tradeId ?? ""));
+    if (!trade) return;
+    const allowed = verb === "rejected" ? trade.toId : trade.fromId;
+    if (allowed !== client.sessionId) return this.deny(client, "That offer is not yours to close.");
+
+    this.state.trades.delete(trade.id);
+    this.log(verb === "rejected"
+      ? `${this.name(trade.toId)} rejected ${this.name(trade.fromId)}'s trade.`
+      : `${this.name(trade.fromId)} withdrew a trade offer.`);
+  }
+
+  /**
+   * Type-ahead for the trade screen, answered from the BST index in BoardGraph:
+   * an exact-name hit first, otherwise every property starting with the query,
+   * already in alphabetical order from the tree's in-order traversal.
+   */
+  private handleSearchProperty(client: Client, query: string) {
+    const q = String(query ?? "").trim();
+    if (q.length === 0) return client.send("propertyResults", { tiles: [] });
+
+    const exact = findByName(q);
+    const tiles = exact ? [exact.index] : searchByPrefix(q).map((t) => t.index);
+    client.send("propertyResults", { tiles: tiles.slice(0, 12) });
+  }
+
+  /** Drop any offers involving a player who has left or gone bankrupt. */
+  private clearTradesFor(playerId: string) {
+    for (const trade of [...this.state.trades.values()]) {
+      if (trade.fromId === playerId || trade.toId === playerId) {
+        this.state.trades.delete(trade.id);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- helpers
 
   /** O(1) average through the hash table rather than the network schema map. */
@@ -612,4 +740,13 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.state.log.push(line);
     while (this.state.log.length > 40) this.state.log.shift();
   }
+}
+
+/** Coerce an untrusted array of board indices into whole numbers in range. */
+function toTileList(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => Math.floor(Number(v)))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n < 40)
+    .slice(0, 28);
 }

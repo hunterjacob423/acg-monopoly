@@ -576,10 +576,28 @@ client/src/
               <tr><td class="id">doubles</td><td class="ty">uint8</td><td>0–3</td><td>Consecutive doubles this turn; 3 sends the player to jail</td></tr>
               <tr><td class="id">pendingPurchase</td><td class="ty">int8</td><td>−1, or 0–39</td><td>Square awaiting a buy or decline; −1 when none. Signed so that −1 fits</td></tr>
               <tr><td class="id">winnerId</td><td class="ty">string</td><td>session ID or <code>""</code></td><td>Set once when the game ends</td></tr>
+              <tr><td class="id">trades</td><td class="ty">MapSchema&lt;Trade&gt;</td><td>0 or more</td><td>Open trade offers, keyed by trade id</td></tr>
               <tr><td class="id">log</td><td class="ty">string[]</td><td>≤ 40 entries</td><td>Event log, capped so a long game cannot grow memory without limit</td></tr>
             </tbody>
           </table>
         </div>
+
+        <h4>Trade — one per open offer</h4>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Field</th><th>Type</th><th>Range / values</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td class="id">id</td><td class="ty">string</td><td><code>t1</code>, <code>t2</code>, …</td><td>Identifies the offer; also the key in <code>trades</code></td></tr>
+              <tr><td class="id">fromId</td><td class="ty">string</td><td>session ID</td><td>Who proposed it; only they may withdraw it</td></tr>
+              <tr><td class="id">toId</td><td class="ty">string</td><td>session ID</td><td>Who must answer; only they may accept or reject</td></tr>
+              <tr><td class="id">offerTiles</td><td class="ty">uint8[]</td><td>0–28 entries</td><td>Board indices the proposer is giving away</td></tr>
+              <tr><td class="id">requestTiles</td><td class="ty">uint8[]</td><td>0–28 entries</td><td>Board indices the proposer is asking for</td></tr>
+              <tr><td class="id">offerMoney</td><td class="ty">int32</td><td>≥ 0</td><td>Cash the proposer adds</td></tr>
+              <tr><td class="id">requestMoney</td><td class="ty">int32</td><td>≥ 0</td><td>Cash the proposer wants</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Offers are synced so both parties can see the terms. They are removed when accepted, rejected, withdrawn, or when either player leaves or goes bankrupt.</p>
 
         <h3>Static board data</h3>
         <p>The 40 squares are constant and therefore not part of the synchronised state — both sides import them from <code>shared/board.ts</code>. Only the 28 ownable squares get a <code>Property</code> record.</p>
@@ -621,6 +639,11 @@ client/src/
               <tr><td class="id">mortgage</td><td class="ty">{ tile }</td><td>Owns it; not already mortgaged; no houses standing</td></tr>
               <tr><td class="id">unmortgage</td><td class="ty">{ tile }</td><td>Owns it; is mortgaged; can afford the loan plus 10%</td></tr>
               <tr><td class="id">declareBankruptcy</td><td class="ty">—</td><td>Balance is negative</td></tr>
+              <tr><td class="id">proposeTrade</td><td class="ty">{ toId, offerTiles, requestTiles, offerMoney, requestMoney }</td><td>Game in progress; both players active; proposer owns everything offered and recipient owns everything requested; no houses on any listed street; both hold the cash promised; no offer already open between the pair</td></tr>
+              <tr><td class="id">acceptTrade</td><td class="ty">{ tradeId }</td><td>Sender is the recipient; the whole proposal still passes validation</td></tr>
+              <tr><td class="id">rejectTrade</td><td class="ty">{ tradeId }</td><td>Sender is the recipient</td></tr>
+              <tr><td class="id">cancelTrade</td><td class="ty">{ tradeId }</td><td>Sender is the proposer</td></tr>
+              <tr><td class="id">searchProperty</td><td class="ty">{ query }</td><td>None; answered from the BST index with at most 12 matches</td></tr>
             </tbody>
           </table>
         </div>
@@ -815,8 +838,8 @@ client/src/
                 <td>Every incoming message needs this lookup. O(1) average versus O(n) for a scan. Uses djb2 hashing with separate chaining and resizes above a 0.75 load factor</td>
               </tr>
               <tr>
-                <td class="id">BinarySearchTree</td><td>Property name index <span class="pill red">not yet called</span></td>
-                <td>O(log n) search, and an in-order traversal produces the alphabetical list with no sorting step — which a hash table cannot do. Built and tested, but its intended consumer is the trade screen, which is not yet implemented</td>
+                <td class="id">BinarySearchTree</td><td>Property lookup for the trade screen</td>
+                <td>O(log n) search by name, and a prefix search built on the in-order traversal returns matches already in alphabetical order — which a hash table cannot do. Reached live through the <code>searchProperty</code> message</td>
               </tr>
             </tbody>
           </table>
@@ -881,9 +904,9 @@ client/src/
         </div>
         <p>Every depth above is bounded and small, so stack overflow is not a practical risk. <code>moveRecursive</code> and <code>binarySearchRecursive</code> duplicate iterative versions on purpose, and tests assert the two forms agree — the recursive walk is checked against the iterative one for all 40 starting squares across four step counts.</p>
 
-        <div class="note defect">
-          <h4>Current limitation — recursion is not on the live path</h4>
-          <p>All six recursive functions are implemented and tested, but none is reached during a game. Movement calls the iterative <code>move()</code>, the leaderboard calls the iterative <code>binarySearch()</code>, and the BST's recursive internals are unreachable because nothing queries the tree yet. Building the trade screen would put the BST — and with it the recursive insert, search and traversal — onto the live path.</p>
+        <div class="note">
+          <h4>Which recursion runs during a game</h4>
+          <p>The BST's recursive <code>insertInto</code> runs at startup, indexing all 28 properties. Its recursive <code>searchFrom</code> and <code>traverseInOrder</code> run whenever a player types in the trade screen's search box. <code>moveRecursive</code> and <code>binarySearchRecursive</code> are deliberate duplicates of the iterative versions, kept for comparison and covered by tests that assert the two forms agree; the live paths use the iterative <code>move()</code> and <code>binarySearch()</code>.</p>
         </div>
       </section>
 
@@ -943,8 +966,8 @@ client/src/
         <p>Tests run with <code>npm test</code>, using Node's built-in test runner so the project carries no test framework dependency. All figures below are from the current run.</p>
 
         <div class="stats">
-          <div class="stat"><div class="v">62</div><div class="k">Tests</div></div>
-          <div class="stat"><div class="v">62</div><div class="k">Passing</div></div>
+          <div class="stat"><div class="v">76</div><div class="k">Tests</div></div>
+          <div class="stat"><div class="v">76</div><div class="k">Passing</div></div>
           <div class="stat"><div class="v">0</div><div class="k">Failing</div></div>
           <div class="stat"><div class="v">85<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
         </div>
@@ -959,9 +982,9 @@ client/src/
                 <td><span class="pill">24 pass</span></td>
               </tr>
               <tr>
-                <td class="id">rules</td><td class="num">21</td>
+                <td class="id">rules</td><td class="num">35</td>
                 <td>Rent for unowned, single, complete-group, mortgaged, developed, station and utility squares; building refused without the group, on the wrong owner, on stations, unevenly, while mortgaged, when unaffordable, and past a hotel; building <em>allowed</em> and carried to hotels on a full group; selling evenly; mortgage values; net worth with and without mortgages</td>
-                <td><span class="pill">21 pass</span></td>
+                <td><span class="pill">35 pass</span></td>
               </tr>
               <tr>
                 <td class="id">BoardGraph</td><td class="num">10</td>
@@ -1021,7 +1044,6 @@ client/src/
 
         <h3>Known limitations</h3>
         <ul>
-          <li><strong>No trading between players.</strong> The most complex remaining feature; the schema has room for it.</li>
           <li><strong>No auctions.</strong> A declined property stays with the bank rather than going to auction.</li>
           <li><strong>No house or hotel supply limit.</strong> The real game has 32 houses and 12 hotels; here they are unlimited.</li>
           <li><strong>Free Parking collects nothing</strong>, which matches the printed rules rather than the common house rule.</li>

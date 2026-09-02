@@ -76,3 +76,39 @@ button.secondary { background: transparent; color: var(--accent);
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; height: auto; }
 }
+
+/* ---- trading ---- */
+.trade-panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.trade-panel h3 { margin: 0; font-size: 14px; }
+.trade-panel h4 {
+  margin: 6px 0 0; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); font-weight: 600;
+}
+.field { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.field span { flex: 0 0 42px; }
+.field select, .field input {
+  flex: 1; background: #0d1017; border: 1px solid var(--line);
+  border-radius: 5px; padding: 6px 8px; color: var(--text); font: inherit; font-size: 12px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #0d1017; color: var(--text); border: 1px solid var(--line);
+  border-radius: 5px; padding: 4px 7px; font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.chip.picked { border-color: var(--accent); background: #16283f; }
+.chip:disabled { opacity: .4; cursor: not-allowed; }
+.chip-band { width: 4px; height: 11px; border-radius: 1px; display: inline-block; }
+.trade-actions { display: flex; gap: 6px; margin-top: 4px; }
+.trade-actions button { flex: 1; padding: 6px 8px; font-size: 12px; }
+.trades { display: flex; flex-direction: column; gap: 8px; }
+.trade-offer {
+  background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 5px;
+}
+.trade-head { font-size: 12px; font-weight: 600; }
+.trade-line { display: flex; gap: 8px; font-size: 11.5px; }
+.trade-label { flex: 0 0 58px; color: var(--muted); }

@@ -3,7 +3,7 @@
  * unit tested (and reasoned about) on their own.
  */
 import { BOARD, STATION_RENT, tilesInGroup, type ColourGroup } from "../shared/board";
-import type { GameState } from "../rooms/schema/GameState";
+import type { GameState, Player } from "../rooms/schema/GameState";
 
 export function countOwned(state: GameState, ownerId: string, kind: "station" | "utility"): number {
   let n = 0;
@@ -109,3 +109,60 @@ export const mortgageValue = (tile: number) => Math.floor((BOARD[tile].price ?? 
  * up charges the player an extra pound.
  */
 export const unmortgageCost = (tile: number) => Math.ceil((mortgageValue(tile) * 11) / 10);
+
+/** One side of a proposed trade. */
+export interface TradeSide {
+  playerId: string;
+  tiles: number[];
+  money: number;
+}
+
+/**
+ * Why a proposed trade is illegal, or null if it may go ahead.
+ *
+ * Called twice for every trade: once when it is proposed, and again when it is
+ * accepted. The second check is not redundant — between the two, the proposer
+ * may have spent the cash or mortgaged one of the properties involved.
+ */
+export function tradeError(state: GameState, from: TradeSide, to: TradeSide): string | null {
+  const proposer = state.players.get(from.playerId);
+  const recipient = state.players.get(to.playerId);
+
+  if (!proposer || !recipient) return "That player is not in this game.";
+  if (from.playerId === to.playerId) return "You cannot trade with yourself.";
+  if (proposer.bankrupt || recipient.bankrupt) return "That player is out of the game.";
+
+  if (from.tiles.length === 0 && to.tiles.length === 0 &&
+      from.money === 0 && to.money === 0) {
+    return "A trade has to involve something.";
+  }
+
+  for (const side of [from, to]) {
+    if (!Number.isInteger(side.money) || side.money < 0) return "Cash amounts must be whole and positive.";
+    if (new Set(side.tiles).size !== side.tiles.length) return "The same property is listed twice.";
+  }
+
+  if (proposer.money < from.money) return "You do not have that much cash.";
+  if (recipient.money < to.money) return `${recipient.name} does not have that much cash.`;
+
+  // `isYou` picks the grammatical person, so the message reads correctly whether
+  // it is about the person reading it or about the other player.
+  const sideError = (side: TradeSide, owner: Player, isYou: boolean): string | null => {
+    const subject = isYou ? "You" : owner.name;
+    const doesNotOwn = isYou ? "do not own" : "does not own";
+    const mustSell = isYou ? "Sell" : `${owner.name} must sell`;
+
+    for (const tile of side.tiles) {
+      const prop = state.properties.get(String(tile));
+      if (!prop) return "That square cannot be traded.";
+      if (prop.ownerId !== owner.id) return `${subject} ${doesNotOwn} ${BOARD[tile].name}.`;
+      // Houses are not transferable: the real rules require selling them to the
+      // bank first, and allowing them through would also break the even-build
+      // invariant across a colour group that is about to change hands.
+      if (prop.houses > 0) return `${mustSell} the houses on ${BOARD[tile].name} first.`;
+    }
+    return null;
+  };
+
+  return sideError(from, proposer, true) ?? sideError(to, recipient, false);
+}

@@ -31,6 +31,23 @@ export class Property extends Schema {
   @type("boolean") mortgaged = false;
 }
 
+/**
+ * A trade offer awaiting an answer from the recipient. Both parties can see it,
+ * so it lives in the synced schema; the server still re-validates on accept,
+ * because ownership or money may have changed since it was proposed.
+ */
+export class Trade extends Schema {
+  @type("string") id = "";
+  @type("string") fromId = "";
+  @type("string") toId = "";
+  /** Board indices the proposer is giving away. */
+  @type(["uint8"]) offerTiles = new ArraySchema<number>();
+  /** Board indices the proposer is asking for. */
+  @type(["uint8"]) requestTiles = new ArraySchema<number>();
+  @type("int32") offerMoney = 0;
+  @type("int32") requestMoney = 0;
+}
+
 export class GameState extends Schema {
   @type("string") roomCode = "";
   /** "lobby" | "rolling" | "deciding" | "acting" | "ended" */
@@ -52,6 +69,9 @@ export class GameState extends Schema {
   /** Tile awaiting a buy/decline decision, or -1. */
   @type("int8") pendingPurchase = -1;
   @type("string") winnerId = "";
+
+  /** Open trade offers, keyed by trade id. Removed once accepted or refused. */
+  @type({ map: Trade }) trades = new MapSchema<Trade>();
 
   /** Rolling log, newest last, capped at 40 entries. */
   @type(["string"]) log = new ArraySchema<string>();

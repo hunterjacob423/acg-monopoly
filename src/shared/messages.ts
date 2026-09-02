@@ -14,6 +14,20 @@ export interface ClientMessages {
   mortgage: { tile: number };
   unmortgage: { tile: number };
   declareBankruptcy: void;
+
+  /** Offer a swap of property and cash to another player. */
+  proposeTrade: {
+    toId: string;
+    offerTiles: number[];
+    requestTiles: number[];
+    offerMoney: number;
+    requestMoney: number;
+  };
+  acceptTrade: { tradeId: string };   // recipient only
+  rejectTrade: { tradeId: string };   // recipient only
+  cancelTrade: { tradeId: string };   // proposer withdraws
+  /** Type-ahead for the trade screen; answered with `propertyResults`. */
+  searchProperty: { query: string };
 }
 
 export type ClientMessageType = keyof ClientMessages;
@@ -22,6 +36,8 @@ export type ClientMessageType = keyof ClientMessages;
 export interface ServerMessages {
   error: { message: string };
   card: { deck: "chance" | "chest"; text: string };
+  /** Board indices matching a searchProperty query, in alphabetical order. */
+  propertyResults: { tiles: number[] };
 }
 
 /** Join options, validated in onAuth/onJoin. */

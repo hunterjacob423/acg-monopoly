@@ -4,7 +4,7 @@ import { GameState, Player, Property } from "../rooms/schema/GameState";
 import { OWNABLE, tilesInGroup } from "../shared/board";
 import {
   buildError, sellError, rentFor, netWorth, countOwned, ownsWholeGroup,
-  mortgageValue, unmortgageCost,
+  mortgageValue, unmortgageCost, tradeError, type TradeSide,
 } from "./rules";
 
 /** A game state with the given players, all 28 properties owned by the bank. */
@@ -199,4 +199,127 @@ test("netWorth ignores a mortgaged property's sale value", () => {
   state.players.get("p0")!.money = 0;
   state.properties.get("1")!.mortgaged = true;
   assert.equal(netWorth(state, "p0"), 30); // only Whitechapel still counts
+});
+
+// ---------------------------------------------------------------- trading
+
+const side = (playerId: string, tiles: number[] = [], money = 0): TradeSide =>
+  ({ playerId, tiles, money });
+
+test("trade: a straight swap of two owned properties is legal", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  give(state, [3], "p1");
+  assert.equal(tradeError(state, side("p0", [1]), side("p1", [3])), null);
+});
+
+test("trade: property for cash is legal in both directions", () => {
+  const state = makeState("A", "B");
+  give(state, [39], "p0");
+  assert.equal(tradeError(state, side("p0", [39]), side("p1", [], 800)), null);
+  assert.equal(tradeError(state, side("p0", [], 800), side("p1", [39])),
+    "B does not own Mayfair.");
+});
+
+test("trade: you cannot give away what you do not own", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p1");
+  assert.equal(tradeError(state, side("p0", [1]), side("p1", [], 10)),
+    "You do not own Old Kent Road.");
+});
+
+test("trade: you cannot ask for what the other player does not own", () => {
+  const state = makeState("A", "B");
+  assert.equal(tradeError(state, side("p0", [], 50), side("p1", [24])),
+    "B does not own Trafalgar Square.");
+});
+
+test("trade: houses must be sold before a street can change hands", () => {
+  const state = makeState("A", "B");
+  give(state, BROWN, "p0");
+  state.properties.get("1")!.houses = 1;
+  assert.equal(tradeError(state, side("p0", [1]), side("p1", [], 100)),
+    "Sell the houses on Old Kent Road first.");
+  // The undeveloped one in the same group is still tradeable.
+  assert.equal(tradeError(state, side("p0", [3]), side("p1", [], 100)), null);
+});
+
+test("trade: a mortgaged property CAN be traded, carrying its mortgage", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  state.properties.get("1")!.mortgaged = true;
+  assert.equal(tradeError(state, side("p0", [1]), side("p1", [], 10)), null);
+});
+
+test("trade: cash offered must actually be held", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p1");
+  assert.equal(tradeError(state, side("p0", [], 5000), side("p1", [1])),
+    "You do not have that much cash.");
+  state.players.get("p1")!.money = 20;
+  assert.equal(tradeError(state, side("p0", [], 10), side("p1", [1], 500)),
+    "B does not have that much cash.");
+});
+
+test("trade: negative or fractional cash is refused", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p1");
+  assert.equal(tradeError(state, side("p0", [], -100), side("p1", [1])),
+    "Cash amounts must be whole and positive.");
+  assert.equal(tradeError(state, side("p0", [], 10.5), side("p1", [1])),
+    "Cash amounts must be whole and positive.");
+});
+
+test("trade: an empty trade is refused", () => {
+  const state = makeState("A", "B");
+  assert.equal(tradeError(state, side("p0"), side("p1")),
+    "A trade has to involve something.");
+});
+
+test("trade: the same property cannot be listed twice", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  assert.equal(tradeError(state, side("p0", [1, 1]), side("p1", [], 10)),
+    "The same property is listed twice.");
+});
+
+test("trade: you cannot trade with yourself or with a bankrupt player", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  assert.equal(tradeError(state, side("p0", [1]), side("p0", [], 10)),
+    "You cannot trade with yourself.");
+  state.players.get("p1")!.bankrupt = true;
+  assert.equal(tradeError(state, side("p0", [1]), side("p1", [], 10)),
+    "That player is out of the game.");
+});
+
+test("trade: an unknown player is refused", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  assert.equal(tradeError(state, side("p0", [1]), side("ghost", [], 10)),
+    "That player is not in this game.");
+});
+
+test("trade: an offer that was legal becomes invalid if the cash is spent first", () => {
+  const state = makeState("A", "B");
+  give(state, [1], "p0");
+  const offer = () => tradeError(state, side("p0", [1]), side("p1", [], 120));
+
+  // Legal when proposed: B has the full £1500.
+  assert.equal(offer(), null);
+
+  // B spends before accepting. The same offer must now be refused, which is why
+  // the room re-validates on accept rather than trusting the proposal.
+  state.players.get("p1")!.money = 86;
+  assert.equal(offer(), "B does not have that much cash.");
+});
+
+test("trade: an offer becomes invalid if a traded property is built on first", () => {
+  const state = makeState("A", "B");
+  give(state, BROWN, "p0");
+  const offer = () => tradeError(state, side("p0", [1]), side("p1", [], 100));
+
+  assert.equal(offer(), null);
+  state.properties.get("1")!.houses = 1;
+  assert.equal(offer(), "Sell the houses on Old Kent Road first.");
 });

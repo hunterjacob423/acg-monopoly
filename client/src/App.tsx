@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BOARD } from "@shared/board";
 import { Board } from "./Board";
 import { useGame } from "./useGame";
+import { TradeBuilder, TradeInbox } from "./Trade";
 import type { Snapshot } from "./types";
 
 export function App() {
@@ -172,6 +173,7 @@ function Lobby({ state, selfId, send }: {
 function Sidebar({ state, selfId, send }: {
   state: Snapshot; selfId: string; send: (t: string, p?: unknown) => void;
 }) {
+  const [tradeOpen, setTradeOpen] = useState(false);
   const me = state.players[selfId];
   const currentId = state.turnOrder[state.currentTurn];
   const myTurn = currentId === selfId;
@@ -228,6 +230,16 @@ function Sidebar({ state, selfId, send }: {
           <p className="waiting">Waiting for {state.players[currentId]?.name}…</p>
         )}
       </section>}
+
+      {state.phase !== "lobby" && state.phase !== "ended" && !me?.bankrupt && (
+        tradeOpen
+          ? <TradeBuilder state={state} selfId={selfId} send={send} onClose={() => setTradeOpen(false)} />
+          : <section className="actions">
+              <button className="secondary" onClick={() => setTradeOpen(true)}>Offer a trade</button>
+            </section>
+      )}
+
+      <TradeInbox state={state} selfId={selfId} send={send} />
 
       {state.phase !== "lobby" && <section className="holdings">
         <h3>Your property</h3>

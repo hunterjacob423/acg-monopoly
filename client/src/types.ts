@@ -9,6 +9,12 @@ export interface PropertyView {
   tile: number; ownerId: string; houses: number; mortgaged: boolean;
 }
 
+export interface TradeView {
+  id: string; fromId: string; toId: string;
+  offerTiles: number[]; requestTiles: number[];
+  offerMoney: number; requestMoney: number;
+}
+
 export interface Snapshot {
   roomCode: string;
   phase: "lobby" | "rolling" | "deciding" | "acting" | "ended";
@@ -19,5 +25,6 @@ export interface Snapshot {
   die1: number; die2: number; doubles: number;
   pendingPurchase: number;
   winnerId: string;
+  trades: Record<string, TradeView>;
   log: string[];
 }
