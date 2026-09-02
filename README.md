@@ -104,9 +104,9 @@ the game, rather than existing to be demonstrated.
 | Circular linked list | `game/BoardGraph.ts` — the board itself | Squares physically lead to the next; Mayfair leads back to GO. Passing GO falls out of the walk instead of needing index comparisons |
 | Circular queue | `MonopolyRoom.turnQueue` | Ending a turn dequeues the player and enqueues them at the back; the rotation repeats with no wrapping index |
 | Queue | Chance / Community Chest draw piles | Monopoly returns a used card to the *bottom* of the pile — first in, first out |
-| Stack | Card discard piles, and the event log | The most recent card sits on top; the log is read newest-first, which is pop order |
+| Stack | Card discard piles | The most recent card sits on top; the pile is popped one card at a time to refill the draw queue when it empties |
 | Hash table | `MonopolyRoom.playerIndex` | Every incoming message needs a player lookup by session ID. O(1) average, with separate chaining that reuses the linked list |
-| Binary search tree | `BoardGraph` property-name index | O(log n) lookup by name, and an in-order traversal gives the alphabetical list with no sorting step |
+| Binary search tree | `BoardGraph` property-name index — **built and tested, not yet called by the game** | O(log n) lookup by name, and an in-order traversal gives the alphabetical list with no sorting step. Its consumer is the trade screen, which is not yet built |
 | Recursion | BST insert/search/traversal/height, `moveRecursive`, `binarySearchRecursive` | The tree is defined recursively; the iterative and recursive forms of movement and binary search sit side by side for comparison |
 | Bubble sort | End-of-game standings (`recordResult`) | At most 6 entries, sorted once. The early-exit pass makes it O(n) when order is unchanged |
 | Insertion sort | Leaderboard inserts, property portfolios | The list is already sorted and one element is out of place — insertion sort's best case |

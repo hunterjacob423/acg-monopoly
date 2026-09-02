@@ -807,16 +807,16 @@ client/src/
                 <td>The real rule returns a used card to the <em>bottom</em> of the pile — first in, first out</td>
               </tr>
               <tr>
-                <td class="id">Stack</td><td>Discard piles; the event log</td>
-                <td>The most recent card sits on top and the pile is turned over when the draw pile empties; the log is read newest-first, which is pop order</td>
+                <td class="id">Stack</td><td>Chance / Community Chest discard piles</td>
+                <td>The most recent card sits on top, and the whole pile is turned over — popped one at a time — to refill the draw queue when it empties</td>
               </tr>
               <tr>
                 <td class="id">HashTable</td><td>Player lookup by session ID</td>
                 <td>Every incoming message needs this lookup. O(1) average versus O(n) for a scan. Uses djb2 hashing with separate chaining and resizes above a 0.75 load factor</td>
               </tr>
               <tr>
-                <td class="id">BinarySearchTree</td><td>Property lookup by name</td>
-                <td>O(log n) search, and an in-order traversal produces the alphabetical list with no sorting step — which a hash table cannot do</td>
+                <td class="id">BinarySearchTree</td><td>Property name index <span class="pill red">not yet called</span></td>
+                <td>O(log n) search, and an in-order traversal produces the alphabetical list with no sorting step — which a hash table cannot do. Built and tested, but its intended consumer is the trade screen, which is not yet implemented</td>
               </tr>
             </tbody>
           </table>
@@ -880,6 +880,11 @@ client/src/
           </table>
         </div>
         <p>Every depth above is bounded and small, so stack overflow is not a practical risk. <code>moveRecursive</code> and <code>binarySearchRecursive</code> duplicate iterative versions on purpose, and tests assert the two forms agree — the recursive walk is checked against the iterative one for all 40 starting squares across four step counts.</p>
+
+        <div class="note defect">
+          <h4>Current limitation — recursion is not on the live path</h4>
+          <p>All six recursive functions are implemented and tested, but none is reached during a game. Movement calls the iterative <code>move()</code>, the leaderboard calls the iterative <code>binarySearch()</code>, and the BST's recursive internals are unreachable because nothing queries the tree yet. Building the trade screen would put the BST — and with it the recursive insert, search and traversal — onto the live path.</p>
+        </div>
       </section>
 
       <!-- ============ 8 ============ -->
