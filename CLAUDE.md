@@ -49,7 +49,7 @@ src/game/BoardGraph.ts      board as a circular linked list + BST name index
 src/game/cards.ts           Chance / Community Chest (server-only by design)
 src/structures/             hand-written data structures and algorithms
 src/persistence/            JSON file handling for the leaderboard
-src/shared/                 imported by BOTH sides — board data and message types
+src/shared/                 imported by BOTH sides — board data, messages, pieces
 client/src/                 React client
 ```
 
@@ -57,6 +57,12 @@ client/src/                 React client
 `proposeTrade`); the server validates and mutates. Never move a rule to the client.
 Card decks live on the Room instance, not in the schema, so no client can read the
 next card.
+
+**Every position change goes through `setPosition`**, which broadcasts a `move`
+message so clients can animate the walk tile by tile. That broadcast is
+presentational only: `Player.position` in the synced state stays the authority, and
+the client falls back to it whenever nothing is animating, so a dropped message or a
+reconnect corrects itself. `steps` is signed for a walk and 0 for a jump.
 
 **`src/shared/` is imported by both sides** through the `@shared` Vite alias. Prices
 and rents therefore cannot drift between the rules and the UI. Keep it that way.

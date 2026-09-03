@@ -28,8 +28,9 @@ button.secondary { background: transparent; color: var(--accent);
 .lobby ul { list-style: none; padding: 0; margin: 0; }
 .lobby li { padding: 8px 0; border-bottom: 1px solid var(--line); }
 
-.board { display: grid; grid-template-columns: repeat(11, 1fr);
-  grid-template-rows: repeat(11, 1fr); gap: 2px; aspect-ratio: 1;
+.board { --gap: 2px; position: relative; display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  grid-template-rows: repeat(11, 1fr); gap: var(--gap); aspect-ratio: 1;
   max-height: calc(100vh - 32px); margin: 0 auto; }
 .tile { position: relative; background: var(--panel); border: 1px solid var(--line);
   border-radius: 3px; padding: 3px; overflow: hidden; font-size: 9px; line-height: 1.15; }
@@ -39,9 +40,50 @@ button.secondary { background: transparent; color: var(--accent);
 .tile-houses { font-size: 8px; }
 .tile-mortgaged { position: absolute; bottom: 2px; left: 3px; font-size: 7px; color: #ff9b6b; }
 .tile-owner { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; }
-.tile-tokens { position: absolute; bottom: 2px; right: 2px; display: flex; gap: 2px; }
-.token { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-  border: 1px solid rgba(0,0,0,.5); vertical-align: middle; }
+/* ---- playing pieces ---- */
+
+/*
+  Pieces are absolutely positioned over the whole board rather than living inside a
+  tile, so that moving one is a transition between two points. The offsets repeat
+  the grid's own track maths, so a piece lands exactly on its tile centre instead of
+  drifting by the accumulated gaps.
+*/
+.board-pieces { position: absolute; inset: 0; pointer-events: none; }
+.piece {
+  position: absolute;
+  width: 24px; height: 24px; margin: -12px 0 0 -12px;
+  left: calc((100% - 10 * var(--gap)) / 11 * (var(--col) + .5) + var(--col) * var(--gap));
+  top:  calc((100% - 10 * var(--gap)) / 11 * (var(--row) + .5) + var(--row) * var(--gap));
+  /* Fan pieces sharing a tile so none is completely hidden. */
+  transform: translate(calc(var(--seat) * 7px), calc(var(--seat) * -5px));
+  display: grid; place-items: center;
+  font-size: 14px; line-height: 1;
+  background: #0d1017; border: 2px solid var(--line); border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0,0,0,.5);
+  /* Linear, and the same duration as STEP_MS, so a walk reads as one steady motion. */
+  transition: left .15s linear, top .15s linear;
+  z-index: 3;
+}
+
+/* The same piece shown small, next to a player's name. */
+.seat {
+  display: inline-grid; place-items: center; flex: 0 0 22px;
+  width: 22px; height: 22px;
+  background: #0d1017; border: 2px solid var(--line); border-radius: 50%;
+  font-size: 12px; line-height: 1;
+}
+
+.picker-title { margin: 6px 0 0; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.token-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.token-option {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: #0d1017; color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 4px; font-size: 10px; font-weight: 500; cursor: pointer;
+}
+.token-option .token-glyph { font-size: 22px; line-height: 1; }
+.token-option.mine { border-color: var(--accent); background: #16283f; }
+.token-option:disabled { opacity: .32; cursor: not-allowed; }
 
 .board-centre { grid-area: 2 / 2 / 11 / 11; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px; }

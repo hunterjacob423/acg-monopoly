@@ -2,7 +2,7 @@
 export interface PlayerView {
   id: string; name: string; money: number; position: number;
   connected: boolean; inJail: boolean; jailTurns: number; jailCards: number;
-  bankrupt: boolean; isHost: boolean; colour: string;
+  bankrupt: boolean; isHost: boolean; colour: string; token: string;
 }
 
 export interface PropertyView {

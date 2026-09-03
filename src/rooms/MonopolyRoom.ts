@@ -4,6 +4,7 @@ import {
   BOARD, GO_SALARY, JAIL_FINE, JAIL_INDEX, OWNABLE, STARTING_MONEY,
 } from "../shared/board";
 import type { JoinOptions } from "../shared/messages";
+import { firstFreeToken, isTokenId } from "../shared/tokens";
 import { CHANCE, COMMUNITY_CHEST, shuffle, type Card, type CardEffects } from "../game/cards";
 import { move, moveBackwards, searchByPrefix, findByName } from "../game/BoardGraph";
 import { Queue, CircularQueue } from "../structures/Queue";
@@ -85,6 +86,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.onMessage("rejectTrade", (client, msg: { tradeId: string }) => this.handleTradeRefusal(client, msg?.tradeId, "rejected"));
     this.onMessage("cancelTrade", (client, msg: { tradeId: string }) => this.handleTradeRefusal(client, msg?.tradeId, "withdrew"));
     this.onMessage("searchProperty", (client, msg: { query: string }) => this.handleSearchProperty(client, msg?.query));
+    this.onMessage("chooseToken", (client, msg: { token: string }) => this.handleChooseToken(client, msg?.token));
   }
 
   // ---------------------------------------------------------------- join / leave
@@ -105,6 +107,10 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     player.name = (options?.name || "Player").slice(0, 16);
     player.money = STARTING_MONEY;
     player.colour = TOKEN_COLOURS[this.state.players.size % TOKEN_COLOURS.length];
+    // Seat everyone with a free piece immediately, so a player who never opens the
+    // picker still has one. maxClients matches the number of pieces, so this always
+    // finds an unclaimed piece.
+    player.token = firstFreeToken(this.takenTokens());
     player.isHost = this.state.players.size === 0;
     this.state.players.set(client.sessionId, player);
     this.playerIndex.set(client.sessionId, player);
@@ -181,6 +187,27 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.publishTurnOrder();
     this.state.phase = "rolling";
     this.log(`Game started. ${this.name(this.state.currentPlayerId)} goes first.`);
+  }
+
+  /** Pieces may only be swapped in the lobby, and no two players may share one. */
+  private handleChooseToken(client: Client, token: string) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (this.state.phase !== "lobby") return this.deny(client, "The game has already started.");
+    if (!isTokenId(token)) return this.deny(client, "That is not a playing piece.");
+    if (this.takenTokens(player.id).includes(token)) {
+      return this.deny(client, "Someone else has taken that piece.");
+    }
+    player.token = token;
+  }
+
+  /** Pieces currently spoken for, ignoring one player's own so re-picking is a no-op. */
+  private takenTokens(exceptId = ""): string[] {
+    const taken: string[] = [];
+    this.state.players.forEach((p) => {
+      if (p.id !== exceptId && p.token) taken.push(p.token);
+    });
+    return taken;
   }
 
   private handleRoll(client: Client) {
@@ -279,6 +306,20 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
   // ---------------------------------------------------------------- movement
 
   /** Move `steps` forward, collecting salary on passing GO, then resolve the tile. */
+  /**
+   * The single place a piece's position changes, so every move can be narrated to
+   * the clients for animation. `steps` is signed for a walk around the board and 0
+   * for a jump — a card teleport, or being sent to jail. The broadcast is purely
+   * presentational; the position in the synced state remains the authority.
+   */
+  private setPosition(player: Player, to: number, steps: number) {
+    const from = player.position;
+    player.position = to;
+    if (from !== to) {
+      this.broadcast("move", { playerId: player.id, from, to, steps });
+    }
+  }
+
   private advancePlayer(player: Player, steps: number) {
     // Follows `next` pointers around the board ring; passedGo is reported by the
     // walk itself rather than inferred from comparing index numbers.
@@ -287,7 +328,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
       player.money += GO_SALARY;
       this.log(`${player.name} passed GO and collected £${GO_SALARY}.`);
     }
-    player.position = result.landedOn;
+    this.setPosition(player, result.landedOn, steps);
     this.resolveTile(player, steps);
   }
 
@@ -297,12 +338,12 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
       player.money += GO_SALARY;
       this.log(`${player.name} passed GO and collected £${GO_SALARY}.`);
     }
-    player.position = tile;
+    this.setPosition(player, tile, 0);
     this.resolveTile(player, this.state.die1 + this.state.die2);
   }
 
   private sendToJail(player: Player) {
-    player.position = JAIL_INDEX;
+    this.setPosition(player, JAIL_INDEX, 0);
     player.inJail = true;
     player.jailTurns = 0;
     this.state.doubles = 0;
@@ -383,9 +424,10 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     return {
       moveTo: (tile, collectGo) => this.teleport(player, tile, collectGo),
       moveBy: (delta) => {
-        player.position = delta < 0
+        const to = delta < 0
           ? moveBackwards(player.position, -delta)
           : move(player.position, delta).landedOn;
+        this.setPosition(player, to, delta);
         this.resolveTile(player, this.state.die1 + this.state.die2);
       },
       gain: (amount) => { player.money += amount; },

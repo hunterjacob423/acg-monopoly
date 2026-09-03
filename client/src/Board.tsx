@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import { BOARD, GROUP_COLOURS, type ColourGroup } from "@shared/board";
+import { tokenGlyph } from "@shared/tokens";
 import type { Snapshot } from "./types";
 
 /**
@@ -16,15 +18,23 @@ function cell(index: number): { gridRow: number; gridColumn: number } {
   return { gridRow: index - 29, gridColumn: 11 };
 }
 
-export function Board({ state }: { state: Snapshot }) {
-  const players = Object.values(state.players);
+export function Board({ state, pieces }: { state: Snapshot; pieces: Record<string, number> }) {
+  const players = Object.values(state.players).filter((p) => !p.bankrupt);
+
+  // Pieces sharing a tile are fanned out so none is completely hidden behind another.
+  const seat: Record<string, number> = {};
+  const occupied: Record<number, number> = {};
+  for (const p of players) {
+    const at = pieces[p.id] ?? p.position;
+    seat[p.id] = occupied[at] ?? 0;
+    occupied[at] = seat[p.id] + 1;
+  }
 
   return (
     <div className="board">
       {BOARD.map((tile) => {
         const prop = state.properties[String(tile.index)];
         const owner = prop?.ownerId ? state.players[prop.ownerId] : undefined;
-        const here = players.filter((p) => p.position === tile.index && !p.bankrupt);
 
         return (
           <div key={tile.index} className="tile" style={cell(tile.index)}>
@@ -39,15 +49,33 @@ export function Board({ state }: { state: Snapshot }) {
             ) : null}
             {prop?.mortgaged && <div className="tile-mortgaged">MTG</div>}
             {owner && <div className="tile-owner" style={{ background: owner.colour }} />}
-
-            <div className="tile-tokens">
-              {here.map((p) => (
-                <span key={p.id} className="token" style={{ background: p.colour }} title={p.name} />
-              ))}
-            </div>
           </div>
         );
       })}
+
+      {/*
+        Pieces sit in one overlay rather than inside each tile. Moving one is then a
+        CSS transition between two points, instead of it vanishing from one tile and
+        reappearing in another.
+      */}
+      <div className="board-pieces">
+        {players.map((p) => {
+          const at = pieces[p.id] ?? p.position;
+          const { gridRow, gridColumn } = cell(at);
+          const style = {
+            borderColor: p.colour,
+            "--row": gridRow - 1,
+            "--col": gridColumn - 1,
+            "--seat": seat[p.id],
+          } as CSSProperties;
+
+          return (
+            <div key={p.id} className="piece" style={style} title={`${p.name} — ${BOARD[at].name}`}>
+              {tokenGlyph(p.token)}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="board-centre">
         <h1>MONOPOLY</h1>

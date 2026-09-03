@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BOARD } from "@shared/board";
+import { TOKENS, tokenGlyph } from "@shared/tokens";
 import { Board } from "./Board";
 import { useGame } from "./useGame";
 import { TradeBuilder, TradeInbox } from "./Trade";
@@ -7,7 +8,7 @@ import type { Snapshot } from "./types";
 
 export function App() {
   const {
-    state, error, toast, busy, passcodeRequired,
+    state, error, toast, busy, passcodeRequired, pieces,
     createGame, joinGame, send, selfId, room, clearError,
   } = useGame();
 
@@ -28,7 +29,7 @@ export function App() {
     <div className="app">
       {state.phase === "lobby"
         ? <Lobby state={state} selfId={selfId} send={send} />
-        : <Board state={state} />}
+        : <Board state={state} pieces={pieces} />}
       <Sidebar state={state} selfId={selfId} send={send} />
       {toast && <div className="toast">{toast}</div>}
     </div>
@@ -156,10 +157,32 @@ function Lobby({ state, selfId, send }: {
       <ul>
         {players.map((p) => (
           <li key={p.id}>
-            <span className="token" style={{ background: p.colour }} /> {p.name} {p.isHost && "(host)"}
+            <span className="seat" style={{ borderColor: p.colour }}>{tokenGlyph(p.token)}</span>
+            {p.name} {p.isHost && "(host)"}
           </li>
         ))}
       </ul>
+
+      <h4 className="picker-title">Your piece</h4>
+      <div className="token-picker">
+        {TOKENS.map((t) => {
+          const holder = players.find((p) => p.token === t.id);
+          const mine = holder?.id === selfId;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`token-option${mine ? " mine" : ""}`}
+              disabled={!!holder && !mine}
+              title={holder && !mine ? `${holder.name} has the ${t.label}` : t.label}
+              onClick={() => send("chooseToken", { token: t.id })}
+            >
+              <span className="token-glyph">{t.glyph}</span>
+              <span className="token-name">{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {isHost
         ? <button disabled={players.length < 2} onClick={() => send("start")}>
@@ -186,7 +209,7 @@ function Sidebar({ state, selfId, send }: {
       <section className="players">
         {Object.values(state.players).map((p) => (
           <div key={p.id} className={`player ${p.id === currentId ? "active" : ""} ${p.bankrupt ? "out" : ""}`}>
-            <span className="token" style={{ background: p.colour }} />
+            <span className="seat" style={{ borderColor: p.colour }}>{tokenGlyph(p.token)}</span>
             <span className="pname">{p.name}{!p.connected && " (away)"}</span>
             <span className="money">£{p.money}</span>
             {p.inJail && <span className="tag">jail</span>}

@@ -28,6 +28,8 @@ export interface ClientMessages {
   cancelTrade: { tradeId: string };   // proposer withdraws
   /** Type-ahead for the trade screen; answered with `propertyResults`. */
   searchProperty: { query: string };
+  /** Claim a playing piece in the lobby; refused if someone already has it. */
+  chooseToken: { token: string };
 }
 
 export type ClientMessageType = keyof ClientMessages;
@@ -38,6 +40,12 @@ export interface ServerMessages {
   card: { deck: "chance" | "chest"; text: string };
   /** Board indices matching a searchProperty query, in alphabetical order. */
   propertyResults: { tiles: number[] };
+  /**
+   * A piece moved, so the clients can animate it. Purely presentational — the
+   * position in the synced state is still the authority. `steps` is signed for a
+   * walk around the board and 0 for a jump (a card teleport, or going to jail).
+   */
+  move: { playerId: string; from: number; to: number; steps: number };
 }
 
 /** Join options, validated in onAuth/onJoin. */

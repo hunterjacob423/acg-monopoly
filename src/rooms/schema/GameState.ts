@@ -20,6 +20,8 @@ export class Player extends Schema {
   @type("boolean") isHost = false;
   /** Board token colour, assigned on join. */
   @type("string") colour = "";
+  /** Playing piece id from shared/tokens.ts. Seeded on join, changed in the lobby. */
+  @type("string") token = "";
 }
 
 export class Property extends Schema {
