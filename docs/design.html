@@ -440,6 +440,8 @@
   shared/
     board.ts                the 40 tiles, prices, rents, and the values
                             derived from them — imported by BOTH sides
+    locations.ts            every square's name and picture — the single file
+                            edited to re-theme the board
     tokens.ts               the six playing pieces — imported by BOTH sides
     messages.ts             the complete vocabulary, in both directions
 
@@ -449,7 +451,12 @@ client/src/
   App.tsx, Board.tsx        entry screen, lobby, board, sidebar
   PropertyCards.tsx         title deed cards for the property a player owns
   DeckCard.tsx              the two draw piles and the card drawn from them
-  types.ts                  plain-object view of the server schema</pre>
+  types.ts                  plain-object view of the server schema
+client/public/locations/    the picture for each square, served as static files</pre>
+
+        <p>A square's <em>name</em> is separated from its <em>economics</em>. <code>locations.ts</code> holds the names and pictures; <code>board.ts</code> holds the rulebook and merges the theme over it as it builds <code>BOARD</code>. The board can therefore be re-themed to places around the school without a price being touched, while the rest of the program still sees exactly one <code>BOARD</code> and needs no knowledge that re-theming exists. The original London names remain in <code>board.ts</code> as a fallback, so a deleted entry leaves a square named rather than blank.</p>
+
+        <p>Two things follow from that, and both are enforced by tests rather than by memory. Nothing may hardcode a square's name: the Chance cards compose their text from the board, because a literal &ldquo;Advance to Mayfair&rdquo; would name a square that no longer existed after a rename. And property names must remain unique, because the BST index is keyed by name and overwrites on an exact duplicate &mdash; two squares sharing a name would leave one silently unreachable from the trade screen's search.</p>
 
         <p>Two helpers, <code>mortgageValue()</code> and <code>unmortgageCost()</code>, sit in <code>shared/board.ts</code> rather than in <code>rules.ts</code>. The title deed cards shown to a player must display exactly the figures the server charges, and both derive purely from the purchase price, so keeping them beside it removes any chance of the two sides disagreeing. <code>rules.ts</code> re-exports them, so its own callers are unaffected by where they live.</p>
 
@@ -609,6 +616,8 @@ client/src/
 
         <h3>Static board data</h3>
         <p>The 40 squares are constant and therefore not part of the synchronised state — both sides import them from <code>shared/board.ts</code>. Only the 28 ownable squares get a <code>Property</code> record.</p>
+
+        <p>Each square carries an <code>index</code>, a <code>kind</code>, and a <code>name</code>, plus the economic fields its kind needs — <code>price</code>, a six-entry <code>rent</code> table, <code>houseCost</code> and <code>group</code> for streets, <code>tax</code> for the two tax squares. Two further fields are presentational and come from <code>locations.ts</code>: <code>image</code>, the filename of the square's picture, and <code>blurb</code>, optional detail shown on hover. Both are optional, and a square with no picture, or one whose file is absent, renders as a plain named square rather than a broken image.</p>
 
         <div class="tw">
           <table>
@@ -992,10 +1001,10 @@ client/src/
         <p>Tests run with <code>npm test</code>, using Node's built-in test runner so the project carries no test framework dependency. All figures below are from the current run.</p>
 
         <div class="stats">
-          <div class="stat"><div class="v">82</div><div class="k">Tests</div></div>
-          <div class="stat"><div class="v">82</div><div class="k">Passing</div></div>
+          <div class="stat"><div class="v">88</div><div class="k">Tests</div></div>
+          <div class="stat"><div class="v">88</div><div class="k">Passing</div></div>
           <div class="stat"><div class="v">0</div><div class="k">Failing</div></div>
-          <div class="stat"><div class="v">101<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
+          <div class="stat"><div class="v">111<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
         </div>
 
         <div class="tw">
@@ -1014,7 +1023,7 @@ client/src/
               </tr>
               <tr>
                 <td class="id">BoardGraph</td><td class="num">10</td>
-                <td>Forty steps returns to the start; Mayfair wraps to GO; passing GO detected from the walked path; landing exactly on GO counts as passing; recursive and iterative walks agree for all 40 squares; backwards movement; BST name lookup, prefix search, alphabetical traversal and tree shape</td>
+                <td>Forty steps returns to the start; the last square wraps to GO; passing GO detected from the walked path; landing exactly on GO counts as passing; recursive and iterative walks agree for all 40 squares; backwards movement; BST name lookup, prefix search, alphabetical traversal and tree shape</td>
                 <td><span class="pill">10 pass</span></td>
               </tr>
               <tr>
@@ -1025,6 +1034,11 @@ client/src/
               <tr>
                 <td class="id">tokens</td><td class="num">6</td>
                 <td>At least as many playing pieces exist as the room admits players, so nobody can be left without one; piece ids are unique; an unrecognised id is rejected; the first unclaimed piece skips those already taken; a piece is still returned when every one is taken; an unrecognised id falls back to a visible glyph rather than drawing nothing</td>
+                <td><span class="pill">6 pass</span></td>
+              </tr>
+              <tr>
+                <td class="id">locations</td><td class="num">6</td>
+                <td>Guards on the one file meant to be hand-edited: every entry refers to a real square; no square is left with a blank name; no two ownable squares share a name, which would make one unreachable through the BST name index; picture entries are bare filenames with a plausible image extension rather than paths or URLs; a square with no picture requests none; and re-theming changes a square's name without disturbing its price</td>
                 <td><span class="pill">6 pass</span></td>
               </tr>
             </tbody>

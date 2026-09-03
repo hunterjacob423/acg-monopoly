@@ -2,6 +2,7 @@
  * Static board definition. Imported by BOTH the server (rules) and the client (rendering),
  * so there is exactly one source of truth for prices and rents.
  */
+import { LOCATIONS } from "./locations";
 
 export type ColourGroup =
   | "brown" | "lightblue" | "pink" | "orange"
@@ -24,9 +25,21 @@ export interface Tile {
   group?: ColourGroup;
   /** Fixed amount for tax tiles. */
   tax?: number;
+  /** Picture filename from locations.ts. Undefined means "just show the name". */
+  image?: string;
+  /** Optional detail shown on hover. */
+  blurb?: string;
 }
 
-export const BOARD: readonly Tile[] = [
+/**
+ * The standard UK board. The `name` on each square is only a FALLBACK — the name
+ * actually used comes from `locations.ts`, which is where re-theming happens. The
+ * originals stay here so a square is never nameless if an entry there is deleted,
+ * and so the prices below can still be recognised as the real Monopoly ones.
+ *
+ * Everything except the name is the rulebook and should not be edited.
+ */
+const CANONICAL: readonly Tile[] = [
   { index: 0,  name: "GO", kind: "go" },
   { index: 1,  name: "Old Kent Road", kind: "street", group: "brown", price: 60, houseCost: 50, rent: [2, 10, 30, 90, 160, 250] },
   { index: 2,  name: "Community Chest", kind: "chest" },
@@ -68,6 +81,20 @@ export const BOARD: readonly Tile[] = [
   { index: 38, name: "Super Tax", kind: "tax", tax: 100 },
   { index: 39, name: "Mayfair", kind: "street", group: "darkblue", price: 400, houseCost: 200, rent: [50, 200, 600, 1400, 1700, 2000] },
 ] as const;
+
+/**
+ * The board the rest of the program sees: the rulebook above, with names and
+ * pictures from `locations.ts` laid over it.
+ *
+ * Merging here rather than at each call site means there is still exactly one
+ * `BOARD`, so nothing downstream — rules, the BST name index, the UI — has to
+ * know that re-theming exists. A square with no entry in `locations.ts` keeps
+ * its canonical name, so the board can be renamed a few squares at a time.
+ */
+export const BOARD: readonly Tile[] = CANONICAL.map((tile) => {
+  const local = LOCATIONS[tile.index];
+  return local ? { ...tile, ...local } : tile;
+});
 
 export const JAIL_INDEX = 10;
 export const GO_SALARY = 200;

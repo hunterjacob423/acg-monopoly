@@ -9,7 +9,7 @@ test("board ring: moving 40 squares returns you to where you started", () => {
   }
 });
 
-test("board ring: Mayfair wraps round to GO with no modular arithmetic", () => {
+test("board ring: the last square wraps round to GO with no modular arithmetic", () => {
   const result = move(39, 1);
   assert.equal(result.landedOn, 0);
   assert.equal(result.passedGo, true);
@@ -52,17 +52,37 @@ test("board ring: moving backwards works without prev pointers", () => {
   assert.equal(moveBackwards(0, 1), 39);
 });
 
+/*
+  These read the names out of BOARD rather than spelling them out, so re-theming
+  the board in shared/locations.ts cannot turn the suite red. What is under test
+  is the BST — that it finds, ignores case, and refuses what was never inserted —
+  none of which has anything to do with what the squares are called.
+*/
+
 test("BST index: finds properties by name, case-insensitively", () => {
-  assert.equal(findByName("Mayfair")?.index, 39);
-  assert.equal(findByName("mayfair")?.index, 39);
-  assert.equal(findByName("OLD KENT ROAD")?.index, 1);
-  assert.equal(findByName("Free Parking"), undefined); // not ownable, not indexed
-  assert.equal(findByName("Nowhere Road"), undefined);
+  for (const index of [1, 24, 39]) {
+    const { name } = BOARD[index];
+    assert.equal(findByName(name)?.index, index, name);
+    assert.equal(findByName(name.toLowerCase())?.index, index, name);
+    assert.equal(findByName(name.toUpperCase())?.index, index, name);
+  }
+  // Free Parking is not ownable, so it was never put in the index.
+  assert.equal(findByName(BOARD[20].name), undefined);
+  assert.equal(findByName("Not A Real Square At All"), undefined);
 });
 
-test("BST index: prefix search finds every Street beginning with 'bo'", () => {
-  const names = searchByPrefix("bo").map((t) => t.name).sort();
-  assert.deepEqual(names, ["Bond Street", "Bow Street"]);
+test("BST index: prefix search finds exactly the properties that match", () => {
+  // Two letters off a real property name — enough to match itself and usually a
+  // sibling, whatever the board has been renamed to.
+  const prefix = BOARD[34].name.slice(0, 2);
+  const expected = BOARD
+    .filter((t) => ["street", "station", "utility"].includes(t.kind))
+    .filter((t) => t.name.toLowerCase().startsWith(prefix.toLowerCase()))
+    .map((t) => t.name)
+    .sort();
+
+  assert.ok(expected.length > 0, `nothing starts with "${prefix}"`);
+  assert.deepEqual(searchByPrefix(prefix).map((t) => t.name).sort(), expected);
 });
 
 test("BST index: in-order traversal is alphabetical and holds all 28 properties", () => {

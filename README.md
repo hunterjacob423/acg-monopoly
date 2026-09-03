@@ -65,7 +65,9 @@ src/
   game/rules.ts            pure rule helpers (rent, build legality, net worth)
   game/cards.ts            Chance / Community Chest — deliberately server-only
   shared/board.ts          the 40 tiles, prices and rents; imported by BOTH sides
+  shared/locations.ts      SQUARE NAMES AND PICTURES — the file to edit to re-theme
   shared/messages.ts       the complete client -> server vocabulary
+  shared/tokens.ts         the six playing pieces
 client/src/
   useGame.ts               connection, reconnection, state snapshots
   App.tsx / Board.tsx      join screen, lobby, board, sidebar
@@ -73,6 +75,24 @@ client/src/
 
 `shared/` is aliased into the client as `@shared`, so prices and rents cannot drift between
 the rules and the UI.
+
+## Re-theming the board
+
+The squares are named in `src/shared/locations.ts`, separately from the prices and rents
+in `board.ts`. Change a `name` there and it updates everywhere at once — the board, the
+title deed cards, the trade screen, the event log, and the Chance cards that send you to a
+named square. Nothing about the game's balance moves with it.
+
+To add a picture, drop the file into `client/public/locations/` and name it in the same
+entry:
+
+```ts
+16: { name: "Sports Hall", image: "sports-hall.jpg" },
+```
+
+A square with no picture, or one whose file is missing, simply shows its name — so the
+board can be renamed today and photographed later. See
+`client/public/locations/README.md` for sizes and formats.
 
 ## Anti-cheat notes
 
@@ -156,7 +176,7 @@ turn state machine, algorithm analysis and the test plan — is in
 npm test
 ```
 
-76 tests covering every structure, the rent and building rules, board movement, and
+88 tests covering every structure, the rent and building rules, board movement, and
 trading, and the leaderboard's file handling. Written with Node's built-in test runner, so there
 is no test framework dependency.
 

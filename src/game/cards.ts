@@ -2,7 +2,14 @@
  * Chance and Community Chest decks. Deliberately NOT part of the synced schema:
  * clients must never be able to read the upcoming card order.
  */
-import { GO_SALARY, JAIL_INDEX } from "../shared/board";
+import { BOARD, GO_SALARY, JAIL_INDEX } from "../shared/board";
+
+/**
+ * A square's current name, so the cards that send you somewhere follow the board
+ * when it is re-themed in `shared/locations.ts`. Hardcoding "Advance to Mayfair"
+ * would leave the deck naming a square that no longer exists.
+ */
+const at = (tile: number) => BOARD[tile].name;
 
 export interface Card {
   text: string;
@@ -27,11 +34,11 @@ export interface CardEffects {
 }
 
 export const CHANCE: Card[] = [
-  { text: "Advance to GO. Collect £200.", effect: (f) => f.moveTo(0, true) },
-  { text: "Advance to Mayfair.", effect: (f) => f.moveTo(39, true) },
-  { text: "Advance to Trafalgar Square. If you pass GO, collect £200.", effect: (f) => f.moveTo(24, true) },
-  { text: "Advance to Pall Mall. If you pass GO, collect £200.", effect: (f) => f.moveTo(11, true) },
-  { text: "Advance to Marylebone Station. If you pass GO, collect £200.", effect: (f) => f.moveTo(15, true) },
+  { text: `Advance to ${at(0)}. Collect £200.`, effect: (f) => f.moveTo(0, true) },
+  { text: `Advance to ${at(39)}.`, effect: (f) => f.moveTo(39, true) },
+  { text: `Advance to ${at(24)}. If you pass GO, collect £200.`, effect: (f) => f.moveTo(24, true) },
+  { text: `Advance to ${at(11)}. If you pass GO, collect £200.`, effect: (f) => f.moveTo(11, true) },
+  { text: `Advance to ${at(15)}. If you pass GO, collect £200.`, effect: (f) => f.moveTo(15, true) },
   { text: "Go back three spaces.", effect: (f) => f.moveBy(-3) },
   { text: "Go to Jail. Do not pass GO, do not collect £200.", effect: (f) => f.goToJail() },
   { text: "Get out of Jail free.", effect: (f) => f.grantJailCard() },
@@ -46,7 +53,7 @@ export const CHANCE: Card[] = [
 ];
 
 export const COMMUNITY_CHEST: Card[] = [
-  { text: "Advance to GO. Collect £200.", effect: (f) => f.moveTo(0, true) },
+  { text: `Advance to ${at(0)}. Collect £200.`, effect: (f) => f.moveTo(0, true) },
   { text: "Bank error in your favour. Collect £200.", effect: (f) => f.gain(GO_SALARY) },
   { text: "Doctor's fee. Pay £50.", effect: (f) => f.pay(50) },
   { text: "From sale of stock you get £50.", effect: (f) => f.gain(50) },

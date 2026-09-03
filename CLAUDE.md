@@ -25,7 +25,7 @@ Two things drive every decision:
 ```bash
 npm install                    # after cloning or a package.json change; also installs client/
 npm run build && npm start     # compile everything, serve on http://localhost:2567
-npm test                       # 76 tests, under a second
+npm test                       # 88 tests, under a second
 npm run dev                    # server with reload  ┐ hot-reload mode,
 npm run dev:client             # client on :5173     ┘ FOR THE DEVELOPER ONLY
 ```
@@ -49,7 +49,7 @@ src/game/BoardGraph.ts      board as a circular linked list + BST name index
 src/game/cards.ts           Chance / Community Chest (server-only by design)
 src/structures/             hand-written data structures and algorithms
 src/persistence/            JSON file handling for the leaderboard
-src/shared/                 imported by BOTH sides — board data, messages, pieces
+src/shared/                 imported by BOTH sides — board data, names, messages, pieces
 client/src/                 React client
 ```
 
@@ -66,6 +66,23 @@ reconnect corrects itself. `steps` is signed for a walk and 0 for a jump.
 
 **`src/shared/` is imported by both sides** through the `@shared` Vite alias. Prices
 and rents therefore cannot drift between the rules and the UI. Keep it that way.
+
+**Names are separated from economics.** `shared/locations.ts` holds every square's
+name and picture; `shared/board.ts` holds the rulebook and merges the theme over it
+when it builds `BOARD`. So the board can be re-themed to places around the school
+without touching a price, and there is still exactly one `BOARD` — nothing
+downstream knows re-theming exists. The canonical London names stay in `board.ts`
+as a fallback, so deleting an entry leaves a square named rather than blank.
+
+Two consequences worth remembering:
+
+- **Nothing may hardcode a square's name.** The Chance cards build their text with
+  `at(39)` for this reason; they used to say "Advance to Mayfair" and would have
+  named a square that no longer existed. Tests read names out of `BOARD` too, so
+  re-theming cannot turn the suite red.
+- **Property names must stay unique.** The BST name index overwrites on an exact
+  duplicate key, so two squares sharing a name would leave one unreachable from the
+  trade search — silently. `locations.test.ts` pins this.
 
 **Structures vs schema.** Colyseus's `MapSchema` is the *wire format*; the hand-written
 structures in `src/structures/` are the *engine*. Game logic reads through
@@ -147,6 +164,10 @@ do not reintroduce the error.
 - **Dev mode is for the developer only.** The dev client hardcodes
   `ws://localhost:2567`, so on someone else's device it looks for a server on *their*
   machine. Anyone else joining needs `npm run build && npm start` on 2567.
+- **`EDGE` in `Board.tsx` and `--edge` in `styles.css` must match.** The board's
+  outer ring is wider than its nine inner tracks, and the pieces are positioned
+  from that ratio. Nothing catches the two drifting apart except pieces visibly
+  landing off-centre, so change both or neither.
 - **Never scale currency by a decimal.** `200 * 1.1` is `220.00000000000003`, which
   once overcharged £1 on unmortgaging. Use integer arithmetic: `Math.ceil(v * 11 / 10)`.
 - **Validate trades twice** — on proposal and again on acceptance. The proposer may

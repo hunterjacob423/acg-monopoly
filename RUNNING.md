@@ -188,13 +188,39 @@ when you have actually set one.
 
 ---
 
-## 6. Running the tests
+## 6. Changing the board to local places
+
+Open `src/shared/locations.ts` and type over the names. That file is the only place
+square names live, so one edit updates the board, the title deed cards, the trade
+screen and the Chance cards together. Prices and rents are in `board.ts` and are not
+affected.
+
+To add a photo, put it in `client/public/locations/` and name it in the same entry:
+
+```ts
+16: { name: "Sports Hall", image: "sports-hall.jpg" },
+```
+
+Then rebuild:
+
+```bash
+npm run build && npm start
+```
+
+A square with no photo, or one whose filename is wrong, just shows its name — you will
+never get a broken-image icon, so it is fine to rename everything now and add pictures
+later. `client/public/locations/README.md` covers sizes and formats.
+
+Two rules the tests will enforce if you break them: no two properties may share a name
+(the search index would lose one), and `image` must be a bare filename, not a path.
+
+## 7. Running the tests
 
 ```
 npm test
 ```
 
-Compiles everything and runs all 76 tests. Takes under a second.
+Compiles everything and runs all 88 tests. Takes under a second.
 
 ---
 
