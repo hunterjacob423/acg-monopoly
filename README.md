@@ -78,6 +78,33 @@ before touching state. Card decks live on the `Room` instance rather than in the
 no client can read the upcoming order. A tampered client can only send messages the server
 will reject.
 
+## Putting it online
+
+Colyseus needs a **persistent process** — it holds WebSocket connections and keeps
+rooms in memory. Serverless hosts (Vercel, Netlify, Cloudflare Workers) cannot do
+that, so they are not an option no matter how the app is packaged.
+
+### Quickest: a tunnel from your own machine
+
+No deploy and no account. Run the server locally, then expose it:
+
+```
+npm run build && npm start
+cloudflared tunnel --url http://localhost:2567     # in a second terminal
+```
+
+It prints a public `https://….trycloudflare.com` address. WebSockets pass through,
+and it works from any network. The URL changes each run and only lives as long as
+the command does, so this is for testing rather than for handing out.
+
+### Free hosting: Render
+
+`render.yaml` in this repo configures a free web service. Connect the repo at
+[render.com](https://render.com) and choose "Blueprint". The free plan sleeps after
+about 15 minutes of inactivity and takes roughly a minute to wake, so the first
+person to open the link waits; after that it is responsive. The filesystem is
+ephemeral, so `data/` is lost on each restart — completed games will not persist.
+
 ## Deploying to Fly.io
 
 ```

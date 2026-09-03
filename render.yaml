@@ -1,0 +1,19 @@
+# Render blueprint. Render's free web service runs a persistent container, which
+# is what Colyseus needs — WebSocket connections and in-memory rooms survive
+# between requests, unlike a serverless function.
+services:
+  - type: web
+    name: acg-monopoly
+    runtime: node
+    plan: free
+    # Installs both halves (the postinstall handles client/), then compiles
+    # the server and bundles the React app.
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Uncomment and set a value to require a shared passcode to join.
+      # - key: CLASS_PASSCODE
+      #   value: your-passcode
