@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 import { BOARD, GROUP_COLOURS, type ColourGroup } from "@shared/board";
 import { tokenGlyph } from "@shared/tokens";
+import { DeckCard } from "./DeckCard";
+import type { CardEvent } from "./useGame";
 import type { Snapshot } from "./types";
 
 /**
@@ -18,7 +20,12 @@ function cell(index: number): { gridRow: number; gridColumn: number } {
   return { gridRow: index - 29, gridColumn: 11 };
 }
 
-export function Board({ state, pieces }: { state: Snapshot; pieces: Record<string, number> }) {
+export function Board({ state, pieces, card, onDismissCard }: {
+  state: Snapshot;
+  pieces: Record<string, number>;
+  card: CardEvent | null;
+  onDismissCard: () => void;
+}) {
   const players = Object.values(state.players).filter((p) => !p.bankrupt);
 
   // Pieces sharing a tile are fanned out so none is completely hidden behind another.
@@ -85,6 +92,9 @@ export function Board({ state, pieces }: { state: Snapshot; pieces: Record<strin
             <span>{state.die1}</span><span>{state.die2}</span>
           </div>
         )}
+
+        {/* Sits inside the ring, so pieces walking the edge stay visible behind it. */}
+        <DeckCard card={card} state={state} onDismiss={onDismissCard} />
       </div>
     </div>
   );

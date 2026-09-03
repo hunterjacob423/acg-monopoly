@@ -85,8 +85,8 @@ button.secondary { background: transparent; color: var(--accent);
 .token-option.mine { border-color: var(--accent); background: #16283f; }
 .token-option:disabled { opacity: .32; cursor: not-allowed; }
 
-.board-centre { grid-area: 2 / 2 / 11 / 11; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 8px; }
+.board-centre { grid-area: 2 / 2 / 11 / 11; position: relative; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .board-centre h1 { letter-spacing: .3em; font-size: 28px; margin: 0; }
 .room-code { color: var(--muted); }
 .dice { display: flex; gap: 8px; }
@@ -245,4 +245,44 @@ button.secondary { background: transparent; color: var(--accent);
 
 @media (max-width: 900px) {
   .deed { flex: 0 0 148px; width: 148px; }
+}
+
+/* ---- chance / community chest ---- */
+
+/*
+  Turns face up in the middle of the board. The rotateX pivots the card towards the
+  viewer like one being flipped over on the table; the overshoot at the end of the
+  curve gives it the small settle a real card has.
+*/
+.deck-card {
+  position: absolute; left: 50%; top: 50%;
+  width: min(80%, 300px);
+  padding: 13px 16px 11px;
+  background: #f6f3ea; color: #14171c;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: 10px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .62);
+  cursor: pointer; z-index: 5;
+  opacity: 0;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-78deg) scale(.9);
+  transition: transform .34s cubic-bezier(.2, .85, .3, 1.24), opacity .2s ease;
+}
+.deck-card.shown {
+  opacity: 1;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(0deg) scale(1);
+}
+
+.deck-head {
+  display: flex; align-items: center; gap: 9px;
+  padding-bottom: 7px; margin-bottom: 9px;
+  border-bottom: 2px solid currentColor;
+}
+.deck-card.chance .deck-head { color: #c25c0d; }
+.deck-card.chest .deck-head { color: #1f5fae; }
+.deck-mark { font-size: 22px; font-weight: 800; line-height: 1; }
+.deck-title { font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+
+.deck-text { margin: 0; font-size: 14px; line-height: 1.35; font-weight: 600; }
+.deck-who {
+  margin-top: 10px; font-size: 9.5px; color: #5a626d;
+  letter-spacing: .1em; text-transform: uppercase;
 }

@@ -9,7 +9,7 @@ import type { Snapshot } from "./types";
 
 export function App() {
   const {
-    state, error, toast, busy, passcodeRequired, pieces,
+    state, error, toast, busy, passcodeRequired, pieces, card, dismissCard,
     createGame, joinGame, send, selfId, room, clearError,
   } = useGame();
 
@@ -30,7 +30,7 @@ export function App() {
     <div className="app">
       {state.phase === "lobby"
         ? <Lobby state={state} selfId={selfId} send={send} />
-        : <Board state={state} pieces={pieces} />}
+        : <Board state={state} pieces={pieces} card={card} onDismissCard={dismissCard} />}
       <Sidebar state={state} selfId={selfId} send={send} />
       {toast && <div className="toast">{toast}</div>}
     </div>

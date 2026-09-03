@@ -37,7 +37,11 @@ export type ClientMessageType = keyof ClientMessages;
 /** Server -> client one-off notifications (state itself syncs automatically). */
 export interface ServerMessages {
   error: { message: string };
-  card: { deck: "chance" | "chest"; text: string };
+  /**
+   * A card was drawn. Broadcast to the whole room, so everyone watches it turn
+   * over. `playerId` is who drew it — presentational, like `move` below.
+   */
+  card: { deck: "chance" | "chest"; playerId: string; text: string };
   /** Board indices matching a searchProperty query, in alphabetical order. */
   propertyResults: { tiles: number[] };
   /**

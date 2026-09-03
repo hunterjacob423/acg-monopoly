@@ -22,6 +22,11 @@ const STEP_MS = 150;
 const JUMP_MS = 420;
 
 export interface MoveEvent { playerId: string; from: number; to: number; steps: number }
+export interface CardEvent { deck: "chance" | "chest"; playerId: string; text: string }
+
+/** How long a drawn card stays face up, and how long it takes to turn over. */
+const CARD_HOLD_MS = 4200;
+const CARD_TURN_MS = 340;
 
 /** Every tile a walking piece passes through, in order, ending on the destination. */
 function walkPath(from: number, steps: number): number[] {
@@ -84,6 +89,43 @@ export function useGame() {
     setTimeout(step, 16);
   }, []);
 
+  /**
+   * The card currently face up. Queued rather than shown directly, because two can
+   * be drawn back to back: Chance on tile 36 can send you back three spaces onto
+   * the Community Chest on tile 33, which draws again.
+   */
+  const [card, setCard] = useState<CardEvent | null>(null);
+  const cardQueue = useRef<CardEvent[]>([]);
+  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const nextCard = useCallback<() => void>(() => {
+    const next = cardQueue.current.shift();
+    if (!next) {
+      cardTimer.current = null;
+      setCard(null);
+      return;
+    }
+    // Blank first, so a second card turns over again rather than its text
+    // swapping underneath one that is already face up.
+    setCard(null);
+    cardTimer.current = setTimeout(() => {
+      setCard(next);
+      cardTimer.current = setTimeout(() => nextCard(), CARD_HOLD_MS);
+    }, CARD_TURN_MS);
+  }, []);
+
+  const showCard = useCallback((c: CardEvent) => {
+    cardQueue.current.push(c);
+    if (!cardTimer.current) nextCard();
+  }, [nextCard]);
+
+  /** Clicking a card moves straight on to the next, or clears it. */
+  const dismissCard = useCallback(() => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = null;
+    nextCard();
+  }, [nextCard]);
+
   // Ask the server whether a passcode is needed, so we never show a box nobody can fill in.
   useEffect(() => {
     fetch(`${httpBase}/config`)
@@ -98,18 +140,22 @@ export function useGame() {
     // complexity than wiring per-field callbacks, and it survives version changes.
     joined.onStateChange((next: any) => setState(next.toJSON() as Snapshot));
     joined.onMessage("error", (m: { message: string }) => setToast(m.message));
-    joined.onMessage("card", (m: { text: string }) => setToast(m.text));
+    joined.onMessage("card", (m: CardEvent) => showCard(m));
     joined.onMessage("move", (m: MoveEvent) => { moveQueue.current.push(m); drain(); });
     joined.onLeave(() => {
       sessionStorage.removeItem(STORAGE_KEY);
       moveQueue.current = [];
       animating.current = false;
+      cardQueue.current = [];
+      if (cardTimer.current) clearTimeout(cardTimer.current);
+      cardTimer.current = null;
       setPieces({});
+      setCard(null);
       setRoom(null);
       setState(null);
     });
     setRoom(joined);
-  }, [drain]);
+  }, [drain, showCard]);
 
   // A page refresh mid-game rejoins the same seat rather than losing it.
   useEffect(() => {
@@ -173,7 +219,7 @@ export function useGame() {
   }, [room]);
 
   return {
-    room, state, error, toast, busy, passcodeRequired, pieces,
+    room, state, error, toast, busy, passcodeRequired, pieces, card, dismissCard,
     createGame, joinGame, send, clearError: () => setError(null),
     selfId: room?.sessionId ?? "",
   };

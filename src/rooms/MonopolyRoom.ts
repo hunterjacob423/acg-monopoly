@@ -415,7 +415,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     const card = draw.dequeue()!;
     discard.push(card);
 
-    this.broadcast("card", { deck, text: card.text });
+    this.broadcast("card", { deck, playerId: player.id, text: card.text });
     this.log(`${player.name}: ${card.text}`);
     card.effect(this.effectsFor(player));
   }
