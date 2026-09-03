@@ -34,8 +34,16 @@ button.secondary { background: transparent; color: var(--accent);
   look small, and it is why zooming — which lets the board overflow and this
   container scroll — does more for legibility than any redistribution of space.
 */
+/*
+  `safe center` and not plain `center`: once the board is wider than this
+  container, a centred flex item overflows equally in both directions and the
+  left-hand edge becomes unreachable — you cannot scroll to it. `safe` drops back
+  to start-alignment exactly when that would happen. Browsers that do not know
+  the keyword ignore the whole declaration and left-align, which is the same
+  outcome in the case that matters.
+*/
 .board-area { position: relative; overflow: auto; display: flex;
-  flex-direction: column; align-items: center; }
+  flex-direction: column; align-items: safe center; }
 
 .board-zoom { position: sticky; top: 0; z-index: 4; align-self: flex-end;
   display: flex; align-items: center; gap: 6px; padding: 0 2px 6px;
@@ -53,16 +61,63 @@ button.secondary { background: transparent; color: var(--accent);
   KEEP IN STEP with EDGE in Board.tsx, which positions the pieces from it. There
   is nothing to catch them drifting apart except pieces landing off-centre.
 */
-.board { --gap: 2px; --edge: 1.4fr; position: relative; display: grid;
-  grid-template-columns: var(--edge) repeat(9, 1fr) var(--edge);
-  grid-template-rows: var(--edge) repeat(9, 1fr) var(--edge);
+.board {
+  --gap: 2px;
+  --edge: 1.55fr;
+  position: relative; display: grid;
+  /*
+    minmax(0, …) and not a bare fr: `1fr` means `minmax(auto, 1fr)`, and that
+    `auto` floor is the track's content size, so a track will not shrink below
+    the longest name in it. The board would then stop being square at low zoom —
+    and since the piece positions are computed from a square, the pieces would
+    land off their squares. A zero floor lets the tracks divide the board
+    exactly, and the names clip instead.
+  */
+  grid-template-columns: minmax(0, var(--edge)) repeat(9, minmax(0, 1fr)) minmax(0, var(--edge));
+  grid-template-rows: minmax(0, var(--edge)) repeat(9, minmax(0, 1fr)) minmax(0, var(--edge));
   gap: var(--gap); aspect-ratio: 1; flex: 0 0 auto;
-  width: calc(min(100%, 100vh - 56px) * var(--zoom, 1)); }
+  /*
+    Without this the board is not square. As a flex item its automatic minimum
+    height is its content height, which outranks aspect-ratio, so at low zoom the
+    squares' text held the board open — 308px wide but 673px tall. The pieces are
+    positioned as fractions of a square board, so they drifted off their squares
+    with it. Zero lets aspect-ratio decide the height, and the text clips.
+  */
+  min-height: 0;
+  /*
+    Whichever runs out first — the width of the column or the height of the
+    window — decides the size, so the whole board is always in view at 100%.
+    Zoom multiplies it for anyone who wants to look closer, and only then does
+    the container scroll.
+  */
+  width: calc(min(100%, 100vh - 56px) * var(--zoom, 1));
+  /*
+    Makes 1cqw mean "1% of the board's width", so everything drawn on a square
+    can be sized as a proportion of the board. Without this the type stays 10px
+    whether the board is 400px or 1600px, and zooming buys empty space rather
+    than legibility.
+  */
+  container-type: inline-size;
+}
 
+/*
+  Everything inside a square is sized in cqw between a floor and a ceiling, so it
+  grows with the board and with zoom. The floor is the old fixed size, so nothing
+  is ever smaller than it used to be; the ceiling stops a projector-sized board
+  turning into billboard type.
+*/
 .tile { position: relative; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line);
-  border-radius: 3px; padding: 3px; overflow: hidden; font-size: 10px; line-height: 1.15; }
-.tile-band { flex: 0 0 auto; height: 7px; margin: -3px -3px 0; }
+  border-radius: 3px; padding: 3px; overflow: hidden;
+  /*
+    A grid item will not shrink below its own content unless told to, so at low
+    zoom the wrapped names would push the rows taller than their share and the
+    board would stop being square — which in turn breaks the piece positions,
+    since those are computed from a square. The names are clipped instead.
+  */
+  min-width: 0; min-height: 0;
+  font-size: clamp(10px, 1.35cqw, 17px); line-height: 1.15; }
+.tile-band { flex: 0 0 auto; height: .7em; margin: -3px -3px 0; }
 
 /*
   The picture is a background rather than an <img> so a filename that is missing
@@ -79,9 +134,9 @@ button.secondary { background: transparent; color: var(--accent);
 .tile-text { position: relative; z-index: 1; margin-top: auto; }
 .tile-name { font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
 .tile-price { color: var(--muted); text-shadow: 0 1px 2px rgba(0,0,0,.85); }
-.tile-houses { position: relative; z-index: 1; font-size: 9px; }
-.tile-mortgaged { position: absolute; z-index: 1; bottom: 2px; right: 3px; font-size: 8px; color: #ff9b6b; }
-.tile-owner { position: absolute; z-index: 1; top: 2px; right: 2px; width: 8px; height: 8px;
+.tile-houses { position: relative; z-index: 1; font-size: .9em; }
+.tile-mortgaged { position: absolute; z-index: 1; bottom: 2px; right: 3px; font-size: .8em; color: #ff9b6b; }
+.tile-owner { position: absolute; z-index: 1; top: 2px; right: 2px; width: .8em; height: .8em;
   border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
 /* ---- playing pieces ---- */
 
@@ -94,7 +149,11 @@ button.secondary { background: transparent; color: var(--accent);
 .board-pieces { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .piece {
   position: absolute;
-  width: 24px; height: 24px; margin: -12px 0 0 -12px;
+  /* Scales with the board like everything else, or a piece becomes a speck on a
+     large board and swamps its square on a small one. */
+  --size: clamp(24px, 2.7cqw, 46px);
+  width: var(--size); height: var(--size);
+  margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
   /*
     --cfrac / --rfrac come from Board.tsx and already account for the outer ring
     being wider than the nine inner tracks. The second term adds back the gaps,
@@ -103,9 +162,9 @@ button.secondary { background: transparent; color: var(--accent);
   left: calc((100% - 10 * var(--gap)) * var(--cfrac) + var(--col) * var(--gap));
   top:  calc((100% - 10 * var(--gap)) * var(--rfrac) + var(--row) * var(--gap));
   /* Fan pieces sharing a tile so none is completely hidden. */
-  transform: translate(calc(var(--seat) * 7px), calc(var(--seat) * -5px));
+  transform: translate(calc(var(--seat) * var(--size) * .29), calc(var(--seat) * var(--size) * -.21));
   display: grid; place-items: center;
-  font-size: 14px; line-height: 1;
+  font-size: calc(var(--size) * .58); line-height: 1;
   background: #0d1017; border: 2px solid var(--line); border-radius: 50%;
   box-shadow: 0 2px 5px rgba(0,0,0,.5);
   /* Linear, and the same duration as STEP_MS, so a walk reads as one steady motion. */
@@ -133,13 +192,25 @@ button.secondary { background: transparent; color: var(--accent);
 .token-option.mine { border-color: var(--accent); background: #16283f; }
 .token-option:disabled { opacity: .32; cursor: not-allowed; }
 
+/*
+  Everything here is sized in cqw for the same reason the squares are, but there
+  is a second reason too: as a grid item this refuses by default to shrink below
+  its own contents, so a fixed 28px title would hold the middle rows open and the
+  board would stop being square at low zoom. That is not merely ugly — the piece
+  positions are computed from a square board, so they would land off their
+  squares. min-height/min-width let it shrink; the cqw sizes mean it rarely has to.
+*/
 .board-centre { grid-area: 2 / 2 / 11 / 11; position: relative; display: flex;
-  flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-.board-centre h1 { letter-spacing: .3em; font-size: 28px; margin: 0; }
-.room-code { color: var(--muted); }
-.dice { display: flex; gap: 8px; }
-.dice span { width: 34px; height: 34px; display: grid; place-items: center;
-  background: #fff; color: #111; border-radius: 6px; font-size: 20px; font-weight: 700; }
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: .8cqw; min-width: 0; min-height: 0; overflow: hidden; }
+.board-centre h1 { letter-spacing: .3em; margin: 0;
+  font-size: clamp(11px, 3.2cqw, 34px); white-space: nowrap; }
+.room-code { color: var(--muted); font-size: clamp(9px, 1.6cqw, 17px); }
+.dice { display: flex; gap: .9cqw; }
+.dice span { width: clamp(18px, 3.9cqw, 42px); height: clamp(18px, 3.9cqw, 42px);
+  display: grid; place-items: center;
+  background: #fff; color: #111; border-radius: 6px;
+  font-size: clamp(11px, 2.3cqw, 25px); font-weight: 700; }
 
 .sidebar { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .sidebar section { background: var(--panel); border: 1px solid var(--line);
@@ -165,6 +236,25 @@ button.secondary { background: transparent; color: var(--accent);
 
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; height: auto; }
+
+  /*
+    On a phone, fitting the board to the screen gives squares roughly 33px
+    across — too small to read a name on, let alone see a photograph. So the
+    board stops shrinking here and is panned instead. 880px puts the squares at
+    about 74px, which is close to what they measure on a real board, and the
+    game becomes playable one-handed rather than technically visible.
+  */
+  /*
+    The row is auto-height here, so the board takes its natural size and the
+    sidebar — the Roll dice button with it — sits directly beneath it rather than
+    below a fixed frame. Zoom in and the controls simply move down with the
+    board; the horizontal overflow inherited from .board-area keeps a magnified
+    board from dragging the rest of the page sideways.
+  */
+
+  /* Comfortable to hit with a thumb rather than a mouse pointer. */
+  .board-zoom { font-size: 13px; gap: 10px; padding: 0 4px 8px; }
+  .board-zoom button { padding: 6px 16px; font-size: 18px; }
 }
 
 /* ---- trading ---- */
@@ -228,7 +318,16 @@ button.secondary { background: transparent; color: var(--accent);
 .hand-empty { color: var(--muted); margin: 0; }
 .hand-cards {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start;
-  gap: 10px; overflow-y: auto; padding: 6px 2px 10px;
+  gap: 10px; overflow-y: auto;
+  /*
+    The top padding is the room a hovered card needs, not decoration. This
+    element scrolls, so it clips: a card rises 14px on hover — 10px of lift plus
+    about 4px from the top edge growing outwards under scale(1.03) — and against
+    the old 6px it lost 8px off the top. The sides are padded for the same reason,
+    the card widening by ~2.6px each way. Changing the hover transform means
+    changing these.
+  */
+  padding: 20px 8px 16px;
 }
 
 /*

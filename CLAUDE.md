@@ -161,13 +161,31 @@ do not reintroduce the error.
 
 ## Traps
 
+- **The whole board must stay in view at 100% zoom, on every screen.** It was
+  briefly given a minimum size on phones and panned instead; that was rejected —
+  seeing all four sides at once matters more than large squares, and panning left
+  the controls stranded. The board is sized by whichever runs out first, the
+  column's width or the window's height. Zoom is the way to see more detail, and
+  the sidebar flows *below* the board on narrow screens, so the Roll dice button
+  moves down with the board rather than being pinned beside a scrolling frame.
 - **Dev mode is for the developer only.** The dev client hardcodes
   `ws://localhost:2567`, so on someone else's device it looks for a server on *their*
   machine. Anyone else joining needs `npm run build && npm start` on 2567.
 - **`EDGE` in `Board.tsx` and `--edge` in `styles.css` must match.** The board's
-  outer ring is wider than its nine inner tracks, and the pieces are positioned
-  from that ratio. Nothing catches the two drifting apart except pieces visibly
-  landing off-centre, so change both or neither.
+  outer ring is wider than its nine inner tracks (currently 1.55 against 1), and
+  the pieces are positioned from that ratio. Nothing catches the two drifting
+  apart except pieces visibly landing off-centre, so change both or neither.
+- **The board must stay square, and that takes three declarations.** The pieces
+  are placed as fractions of a square board, so anything that lets the board grow
+  taller than it is wide silently drags every piece off its square. It needs
+  `min-height: 0` (as a flex item its automatic minimum is its *content* height,
+  which outranks `aspect-ratio`), `minmax(0, …)` tracks (a bare `1fr` means
+  `minmax(auto, 1fr)` and will not shrink below the longest name), and
+  `min-width/min-height: 0` on the squares themselves. Removing any one of them
+  breaks it only at low zoom, which is easy to miss.
+- **Anything drawn on a square is sized in `cqw`,** against the `container-type:
+  inline-size` on `.board`. That is what makes zoom buy legibility rather than
+  empty space. Fixed px there will look wrong at one end of the zoom range.
 - **Never scale currency by a decimal.** `200 * 1.1` is `220.00000000000003`, which
   once overcharged £1 on unmortgaging. Use integer arithmetic: `Math.ceil(v * 11 / 10)`.
 - **Validate trades twice** — on proposal and again on acceptance. The proposer may

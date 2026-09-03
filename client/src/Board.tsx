@@ -13,7 +13,7 @@ import type { Snapshot } from "./types";
  *
  * MUST match `--edge` in styles.css. Nothing enforces that, so change both.
  */
-const EDGE = 1.4;
+const EDGE = 1.55;
 const TRACK_TOTAL = 2 * EDGE + 9;
 
 /**
@@ -49,8 +49,10 @@ function cell(index: number): { gridRow: number; gridColumn: number } {
   scrolls, which is what you want on a projector or when reading a crowded corner.
 */
 const ZOOM_KEY = "acg-board-zoom";
-const ZOOM_MIN = 0.8;
-const ZOOM_MAX = 2;
+// 100% already fits the whole board in view, so below that is only for freeing
+// up room around it rather than for seeing more of the board.
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.15;
 
 function storedZoom(): number {
