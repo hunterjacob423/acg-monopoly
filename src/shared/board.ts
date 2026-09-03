@@ -89,3 +89,15 @@ export const GROUP_COLOURS: Record<ColourGroup, string> = {
   brown: "#7b4a2d", lightblue: "#a9dbf0", pink: "#d43b8c", orange: "#e8862b",
   red: "#d5232a", yellow: "#f3d423", green: "#1c9e4b", darkblue: "#1b52a4",
 };
+
+/** Half the purchase price, rounded down. */
+export const mortgageValue = (tile: number) => Math.floor((BOARD[tile].price ?? 0) / 2);
+
+/**
+ * Lifting a mortgage costs the loan plus 10% interest.
+ *
+ * Written as `* 11 / 10` rather than `* 1.1` because 1.1 has no exact binary
+ * representation: 200 * 1.1 evaluates to 220.00000000000003, and rounding that
+ * up charges the player an extra pound.
+ */
+export const unmortgageCost = (tile: number) => Math.ceil((mortgageValue(tile) * 11) / 10);

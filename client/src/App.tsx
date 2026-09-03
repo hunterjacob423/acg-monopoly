@@ -4,6 +4,7 @@ import { TOKENS, tokenGlyph } from "@shared/tokens";
 import { Board } from "./Board";
 import { useGame } from "./useGame";
 import { TradeBuilder, TradeInbox } from "./Trade";
+import { PropertyHand } from "./PropertyCards";
 import type { Snapshot } from "./types";
 
 export function App() {
@@ -197,6 +198,7 @@ function Sidebar({ state, selfId, send }: {
   state: Snapshot; selfId: string; send: (t: string, p?: unknown) => void;
 }) {
   const [tradeOpen, setTradeOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
   const me = state.players[selfId];
   const currentId = state.turnOrder[state.currentTurn];
   const myTurn = currentId === selfId;
@@ -266,6 +268,9 @@ function Sidebar({ state, selfId, send }: {
 
       {state.phase !== "lobby" && <section className="holdings">
         <h3>Your property</h3>
+        <button className="secondary show-cards" onClick={() => setCardsOpen(true)}>
+          Show cards ({myTiles.length})
+        </button>
         {myTiles.length === 0 && <p className="muted">Nothing yet.</p>}
         {myTiles.map((p) => {
           const def = BOARD[p.tile];
@@ -287,6 +292,14 @@ function Sidebar({ state, selfId, send }: {
       <section className="log">
         {state.log.slice(-14).reverse().map((line, i) => <div key={i}>{line}</div>)}
       </section>
+
+      <PropertyHand
+        state={state}
+        selfId={selfId}
+        send={send}
+        open={cardsOpen}
+        onClose={() => setCardsOpen(false)}
+      />
     </aside>
   );
 }

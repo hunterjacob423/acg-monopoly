@@ -100,15 +100,13 @@ export function houseAndHotelCount(state: GameState, playerId: string): { houses
   return { houses, hotels };
 }
 
-export const mortgageValue = (tile: number) => Math.floor((BOARD[tile].price ?? 0) / 2);
 /**
- * Lifting a mortgage costs the loan plus 10% interest.
- *
- * Written as `* 11 / 10` rather than `* 1.1` because 1.1 has no exact binary
- * representation: 200 * 1.1 evaluates to 220.00000000000003, and rounding that
- * up charges the player an extra pound.
+ * Both derive purely from the purchase price, so they sit in shared/board.ts next
+ * to it: the title deed cards in the client show these figures, and a second copy
+ * over there would be free to drift. Re-exported here so callers of `rules` and
+ * the tests are unaffected by the move.
  */
-export const unmortgageCost = (tile: number) => Math.ceil((mortgageValue(tile) * 11) / 10);
+export { mortgageValue, unmortgageCost } from "../shared/board";
 
 /** One side of a proposed trade. */
 export interface TradeSide {
