@@ -15,6 +15,10 @@ origin, a single deploy, and no CORS to keep in sync.
 
 No database, no Redis, no accounts. A game lives in memory for the length of a match.
 
+> **Just want the commands?** See [RUNNING.md](RUNNING.md) for a copy-and-paste
+> reference covering local play, playing over wifi, the Cloudflare tunnel, and
+> how to stop things.
+
 ## Run it locally
 
 ```
