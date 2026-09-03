@@ -250,25 +250,61 @@ button.secondary { background: transparent; color: var(--accent);
 /* ---- chance / community chest ---- */
 
 /*
-  Turns face up in the middle of the board. The rotateX pivots the card towards the
-  viewer like one being flipped over on the table; the overshoot at the end of the
-  curve gives it the small settle a real card has.
+  The two draw piles, sitting on the board's diagonal as they do on a real board.
+  The stack is faked with solid offset shadows rather than extra elements, which
+  keeps them out of the stacking order entirely.
+*/
+.pile {
+  position: absolute;
+  width: 76px; height: 52px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: 5px;
+  transform: translate(-50%, -50%) rotate(-40deg);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .16), 6px 6px 0 rgba(0, 0, 0, .1),
+              0 6px 14px rgba(0, 0, 0, .45);
+  transition: transform .28s ease, box-shadow .28s ease;
+  pointer-events: none;
+}
+.pile.chest  { left: 29%; top: 31%; background: #cfe0f5; color: #16406f; }
+.pile.chance { left: 71%; top: 69%; background: #f7dcc0; color: #8a4708; }
+/* The pile a card is coming off lifts while it is being drawn. */
+.pile.drawing {
+  transform: translate(-50%, -50%) rotate(-40deg) scale(1.1);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .16), 6px 6px 0 rgba(0, 0, 0, .1),
+              0 10px 22px rgba(0, 0, 0, .6);
+}
+.pile-mark { font-size: 18px; font-weight: 800; line-height: 1; }
+.pile-label {
+  font-size: 6.5px; font-weight: 700; line-height: 1.1;
+  letter-spacing: .07em; text-transform: uppercase; text-align: center;
+}
+
+/*
+  The drawn card starts small and angled, lying on its own pile, then travels to
+  the centre while straightening and turning face up. Since the start position IS
+  the pile, dismissing plays the same motion in reverse and puts the card back.
 */
 .deck-card {
-  position: absolute; left: 50%; top: 50%;
+  position: absolute;
+  left: var(--from-x, 50%); top: var(--from-y, 50%);
   width: min(80%, 300px);
   padding: 13px 16px 11px;
   background: #f6f3ea; color: #14171c;
   border: 1px solid rgba(0, 0, 0, .45); border-radius: 10px;
   box-shadow: 0 18px 42px rgba(0, 0, 0, .62);
-  cursor: pointer; z-index: 5;
-  opacity: 0;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(-78deg) scale(.9);
-  transition: transform .34s cubic-bezier(.2, .85, .3, 1.24), opacity .2s ease;
+  z-index: 5; opacity: 0;
+  transform: translate(-50%, -50%) perspective(900px) rotate(-40deg) rotateX(-62deg) scale(.28);
+  transition:
+    left .44s cubic-bezier(.2, .82, .3, 1.08),
+    top .44s cubic-bezier(.2, .82, .3, 1.08),
+    transform .44s cubic-bezier(.2, .85, .3, 1.2),
+    opacity .2s ease;
 }
+.deck-card.chance { --from-x: 71%; --from-y: 69%; }
+.deck-card.chest  { --from-x: 29%; --from-y: 31%; }
 .deck-card.shown {
-  opacity: 1;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(0deg) scale(1);
+  left: 50%; top: 50%; opacity: 1;
+  transform: translate(-50%, -50%) perspective(900px) rotate(0deg) rotateX(0deg) scale(1);
 }
 
 .deck-head {
@@ -282,7 +318,10 @@ button.secondary { background: transparent; color: var(--accent);
 .deck-title { font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 
 .deck-text { margin: 0; font-size: 14px; line-height: 1.35; font-weight: 600; }
-.deck-who {
-  margin-top: 10px; font-size: 9.5px; color: #5a626d;
-  letter-spacing: .1em; text-transform: uppercase;
+
+.deck-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 12px;
 }
+.deck-who { font-size: 9.5px; color: #5a626d; letter-spacing: .1em; text-transform: uppercase; }
+.deck-dismiss { padding: 5px 14px; font-size: 12px; }

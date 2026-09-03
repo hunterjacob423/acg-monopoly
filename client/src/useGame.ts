@@ -24,9 +24,12 @@ const JUMP_MS = 420;
 export interface MoveEvent { playerId: string; from: number; to: number; steps: number }
 export interface CardEvent { deck: "chance" | "chest"; playerId: string; text: string }
 
-/** How long a drawn card stays face up, and how long it takes to turn over. */
-const CARD_HOLD_MS = 4200;
-const CARD_TURN_MS = 340;
+/**
+ * How long a card takes to travel from its pile and turn face up. There is no
+ * hold: a card stays up until the player dismisses it, so nobody misses one
+ * because they were looking at the board when it appeared.
+ */
+const CARD_TURN_MS = 440;
 
 /** Every tile a walking piece passes through, in order, ending on the destination. */
 function walkPath(from: number, steps: number): number[] {
@@ -96,35 +99,38 @@ export function useGame() {
    */
   const [card, setCard] = useState<CardEvent | null>(null);
   const cardQueue = useRef<CardEvent[]>([]);
+  /** A card is on screen or on its way there, so a new draw waits its turn. */
+  const cardBusy = useRef(false);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const nextCard = useCallback<() => void>(() => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = null;
+
     const next = cardQueue.current.shift();
     if (!next) {
-      cardTimer.current = null;
+      cardBusy.current = false;
       setCard(null);
       return;
     }
-    // Blank first, so a second card turns over again rather than its text
-    // swapping underneath one that is already face up.
+
+    cardBusy.current = true;
+    // Blank first, so a second card is drawn from its pile again rather than its
+    // text swapping underneath one that is already face up.
     setCard(null);
     cardTimer.current = setTimeout(() => {
+      cardTimer.current = null;
       setCard(next);
-      cardTimer.current = setTimeout(() => nextCard(), CARD_HOLD_MS);
     }, CARD_TURN_MS);
   }, []);
 
   const showCard = useCallback((c: CardEvent) => {
     cardQueue.current.push(c);
-    if (!cardTimer.current) nextCard();
+    if (!cardBusy.current) nextCard();
   }, [nextCard]);
 
-  /** Clicking a card moves straight on to the next, or clears it. */
-  const dismissCard = useCallback(() => {
-    if (cardTimer.current) clearTimeout(cardTimer.current);
-    cardTimer.current = null;
-    nextCard();
-  }, [nextCard]);
+  /** Dismissing moves on to the next queued card, or clears the last one. */
+  const dismissCard = useCallback(() => nextCard(), [nextCard]);
 
   // Ask the server whether a passcode is needed, so we never show a box nobody can fill in.
   useEffect(() => {
@@ -147,6 +153,7 @@ export function useGame() {
       moveQueue.current = [];
       animating.current = false;
       cardQueue.current = [];
+      cardBusy.current = false;
       if (cardTimer.current) clearTimeout(cardTimer.current);
       cardTimer.current = null;
       setPieces({});

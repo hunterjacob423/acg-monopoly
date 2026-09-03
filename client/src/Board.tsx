@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { BOARD, GROUP_COLOURS, type ColourGroup } from "@shared/board";
 import { tokenGlyph } from "@shared/tokens";
-import { DeckCard } from "./DeckCard";
+import { DeckCard, DeckPiles } from "./DeckCard";
 import type { CardEvent } from "./useGame";
 import type { Snapshot } from "./types";
 
@@ -92,6 +92,8 @@ export function Board({ state, pieces, card, onDismissCard }: {
             <span>{state.die1}</span><span>{state.die2}</span>
           </div>
         )}
+
+        <DeckPiles drawing={card?.deck ?? null} />
 
         {/* Sits inside the ring, so pieces walking the edge stay visible behind it. */}
         <DeckCard card={card} state={state} onDismiss={onDismissCard} />
