@@ -438,13 +438,20 @@
   persistence/
     Leaderboard.ts          JSON file handling for results and match history
   shared/
-    board.ts                the 40 tiles, prices and rents — imported by BOTH sides
-    messages.ts             the complete client to server vocabulary
+    board.ts                the 40 tiles, prices, rents, and the values
+                            derived from them — imported by BOTH sides
+    tokens.ts               the six playing pieces — imported by BOTH sides
+    messages.ts             the complete vocabulary, in both directions
 
 client/src/
-  useGame.ts                connection, reconnection, state snapshots
+  useGame.ts                connection, reconnection, state snapshots, and the
+                            queues driving the movement and card animations
   App.tsx, Board.tsx        entry screen, lobby, board, sidebar
+  PropertyCards.tsx         title deed cards for the property a player owns
+  DeckCard.tsx              the two draw piles and the card drawn from them
   types.ts                  plain-object view of the server schema</pre>
+
+        <p>Two helpers, <code>mortgageValue()</code> and <code>unmortgageCost()</code>, sit in <code>shared/board.ts</code> rather than in <code>rules.ts</code>. The title deed cards shown to a player must display exactly the figures the server charges, and both derive purely from the purchase price, so keeping them beside it removes any chance of the two sides disagreeing. <code>rules.ts</code> re-exports them, so its own callers are unaffected by where they live.</p>
 
         <figure>
           <svg viewBox="0 0 760 330" role="img" aria-label="Layered class relationships: MonopolyRoom owns GameState and the data structures, calls rules and BoardGraph, and writes to the Leaderboard. Both the room and the React client import the shared board definition.">
@@ -457,7 +464,7 @@ client/src/
             <!-- room -->
             <rect x="266" y="12" width="228" height="52" rx="5" fill="none" stroke="#C8102E" stroke-width="1.7"/>
             <text x="380" y="34" text-anchor="middle" font-size="13.5" font-weight="600" fill="#C8102E">MonopolyRoom</text>
-            <text x="380" y="52" text-anchor="middle" font-size="10.5" fill="#C8102E" opacity=".8">extends Room — 31 methods</text>
+            <text x="380" y="52" text-anchor="middle" font-size="10.5" fill="#C8102E" opacity=".8">extends Room — 39 methods</text>
 
             <!-- schema -->
             <rect x="20" y="118" width="176" height="76" rx="5" fill="none" stroke="currentColor" stroke-width="1.4"/>
@@ -517,7 +524,7 @@ client/src/
             <line x1="310" y1="264" x2="334" y2="264" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
             <line x1="587" y1="286" x2="587" y2="302" stroke="#1E6B45" stroke-width="1.2" marker-end="url(#ar2)"/>
           </svg>
-          <figcaption><b>Figure 2.</b> Dependency direction. <code>MonopolyRoom</code> is the only class that mutates state; <code>rules.ts</code> and <code>BoardGraph</code> are asked questions and answer them without side effects, which is what makes them testable without a server. The green path shows the one file imported by <em>both</em> sides, so prices and rents cannot drift apart.</figcaption>
+          <figcaption><b>Figure 2.</b> Dependency direction. <code>MonopolyRoom</code> is the only class that mutates state; <code>rules.ts</code> and <code>BoardGraph</code> are asked questions and answer them without side effects, which is what makes them testable without a server. The green path shows the files imported by <em>both</em> sides, so prices, rents and playing pieces cannot drift apart.</figcaption>
         </figure>
       </section>
 
@@ -544,6 +551,7 @@ client/src/
               <tr><td class="id">bankrupt</td><td class="ty">boolean</td><td>true / false</td><td>Out of the game; skipped by the turn queue</td></tr>
               <tr><td class="id">isHost</td><td class="ty">boolean</td><td>true / false</td><td>May start the game. Reassigned if the host leaves</td></tr>
               <tr><td class="id">colour</td><td class="ty">string</td><td>hex colour</td><td>Token colour, assigned by join order</td></tr>
+              <tr><td class="id">token</td><td class="ty">string</td><td>piece id, e.g. <code>hat</code></td><td>Which playing piece the player holds. Seeded with the first unclaimed piece on join, and changeable in the lobby until the game starts</td></tr>
             </tbody>
           </table>
         </div>
@@ -644,11 +652,29 @@ client/src/
               <tr><td class="id">rejectTrade</td><td class="ty">{ tradeId }</td><td>Sender is the recipient</td></tr>
               <tr><td class="id">cancelTrade</td><td class="ty">{ tradeId }</td><td>Sender is the proposer</td></tr>
               <tr><td class="id">searchProperty</td><td class="ty">{ query }</td><td>None; answered from the BST index with at most 12 matches</td></tr>
+              <tr><td class="id">chooseToken</td><td class="ty">{ token }</td><td>Phase is <code>lobby</code>; the id names a real piece; no other player already holds it</td></tr>
             </tbody>
           </table>
         </div>
 
-        <p>A rejected message returns an <code>error</code> message naming the reason, which the client shows as a transient notice. The 21 rejection paths are what a modified client meets when it tries anything illegal.</p>
+        <p>A rejected message returns an <code>error</code> message naming the reason, which the client shows as a transient notice. The 31 rejection paths in <code>MonopolyRoom</code> are what a modified client meets when it tries anything illegal.</p>
+
+        <h3>Messages the server sends back</h3>
+        <p>State itself synchronises automatically, so these carry only what the schema cannot: one-off events, and the hints the interface needs in order to animate. None of them hands the client any authority. Each is either an answer to a question the client asked, or a description of something the server has already decided and applied.</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Message</th><th>Payload</th><th>Sent to</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td class="id">error</td><td class="ty">{ message }</td><td>one client</td><td>Why the message just sent was refused</td></tr>
+              <tr><td class="id">propertyResults</td><td class="ty">{ tiles }</td><td>one client</td><td>Answers <code>searchProperty</code> from the BST index</td></tr>
+              <tr><td class="id">card</td><td class="ty">{ deck, playerId, text }</td><td>everyone</td><td>A Chance or Community Chest card was drawn. Broadcast so the whole table watches it, as they would across a real board. Only the drawn card is sent — never the order of the deck behind it</td></tr>
+              <tr><td class="id">move</td><td class="ty">{ playerId, from, to, steps }</td><td>everyone</td><td>A piece moved, so clients can walk it square by square. <code>steps</code> is signed for a walk and 0 for a jump</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The <code>move</code> message needs justifying, since <code>position</code> is already synchronised and a client could in principle just watch it change. It cannot do so reliably. A roll that lands on Chance and is then moved on by the card changes <code>position</code> twice inside a single server tick, and the client receives only the final value — it has no way to tell that apart from one long walk. Rather than have the client guess, the server states what happened. The synchronised <code>position</code> remains the authority: whenever no animation is running each piece is drawn at it, so a lost message or a reconnection corrects itself rather than stranding a piece.</p>
 
         <h3>Room access</h3>
         <p>Rooms are addressed by a five-character code drawn from an alphabet that excludes I, O, 0 and 1, so a code read off a screen cannot be mistyped through ambiguity. Creating uses <code>create()</code> and joining uses <code>join()</code>, deliberately not <code>joinOrCreate()</code>: a mistyped code must be an error, rather than silently producing a second empty room the rest of the group can never find. An optional <code>CLASS_PASSCODE</code> environment variable adds a shared passcode, and the join screen queries <code>GET /config</code> so the passcode field only appears when one is actually required.</p>
@@ -966,10 +992,10 @@ client/src/
         <p>Tests run with <code>npm test</code>, using Node's built-in test runner so the project carries no test framework dependency. All figures below are from the current run.</p>
 
         <div class="stats">
-          <div class="stat"><div class="v">76</div><div class="k">Tests</div></div>
-          <div class="stat"><div class="v">76</div><div class="k">Passing</div></div>
+          <div class="stat"><div class="v">82</div><div class="k">Tests</div></div>
+          <div class="stat"><div class="v">82</div><div class="k">Passing</div></div>
           <div class="stat"><div class="v">0</div><div class="k">Failing</div></div>
-          <div class="stat"><div class="v">85<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
+          <div class="stat"><div class="v">101<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
         </div>
 
         <div class="tw">
@@ -996,6 +1022,11 @@ client/src/
                 <td>Missing file treated as a first run; write then read back; accumulation across three games; sorted invariant maintained so binary search still finds every name; ranking by wins then net worth; corrupt file survived; history ordered newest first</td>
                 <td><span class="pill">7 pass</span></td>
               </tr>
+              <tr>
+                <td class="id">tokens</td><td class="num">6</td>
+                <td>At least as many playing pieces exist as the room admits players, so nobody can be left without one; piece ids are unique; an unrecognised id is rejected; the first unclaimed piece skips those already taken; a piece is still returned when every one is taken; an unrecognised id falls back to a visible glyph rather than drawing nothing</td>
+                <td><span class="pill">6 pass</span></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1016,6 +1047,10 @@ client/src/
               <tr><td>Client killed mid-game, then reconnects</td><td>Seat held for 120s, marked away, restored with money intact</td><td><span class="pill">Pass</span></td></tr>
               <tr><td>A game played to bankruptcy</td><td>Winner declared, standings sorted, both files written</td><td><span class="pill">Pass</span></td></tr>
               <tr><td>Play over the local network from a second device</td><td>Joins and plays normally</td><td><span class="pill">Pass</span></td></tr>
+              <tr><td>Two players open the lobby piece picker</td><td>A piece one player holds is disabled for the other and names its holder</td><td><span class="pill">Pass</span></td></tr>
+              <tr><td>A roll of 3 from GO, recorded with a DOM mutation observer</td><td>The piece is drawn on all three intermediate squares in order, on both players' screens</td><td><span class="pill">Pass</span></td></tr>
+              <tr><td>Title deeds opened on a hand of six properties</td><td>Every rent row, house cost and mortgage value matches <code>board.ts</code>, across a street, a station and a utility</td><td><span class="pill">Pass</span></td></tr>
+              <tr><td>A card drawn, then left untouched for 30 seconds</td><td>Stays face up until dismissed; only the pile it came from is raised</td><td><span class="pill">Pass</span></td></tr>
             </tbody>
           </table>
         </div>
@@ -1026,7 +1061,7 @@ client/src/
         <h2 class="sec"><span class="n">10</span><span>Defects found and fixed</span></h2>
         <div class="sec-rule"></div>
 
-        <p>Both defects below were found by the test suite, not by playing. Both had been present and unnoticed through earlier manual testing, which is the argument for writing the tests at all.</p>
+        <p>The first two defects were found by the test suite rather than by playing, having survived earlier manual testing unnoticed — which is the argument for writing the tests at all. The third could not have been caught that way, and is recorded because how it was found matters as much as the fix.</p>
 
         <div class="note defect">
           <h4>Defect 1 — a two-player game never ended</h4>
@@ -1040,6 +1075,13 @@ client/src/
           <p><strong>Symptom.</strong> A test expected Mayfair's unmortgage cost to be £220 and got £221.</p>
           <p><strong>Cause.</strong> The cost was calculated as <code>Math.ceil(value * 1.1)</code>. The decimal 1.1 has no exact binary representation, so <code>200 * 1.1</code> evaluates to <code>220.00000000000003</code>, and rounding that up adds a pound.</p>
           <p><strong>Fix.</strong> Integer arithmetic — <code>Math.ceil(value * 11 / 10)</code> — which gives exactly 220. A general lesson for any money calculation: never scale currency by a decimal fraction.</p>
+        </div>
+
+        <div class="note defect">
+          <h4>Defect 3 — a moving piece skipped the first square of every walk</h4>
+          <p><strong>Symptom.</strong> Pieces always arrived at the correct destination, so nothing looked wrong. Instrumenting the page with a <code>MutationObserver</code> showed that a roll of 7 produced only six redraws, and that the first square of the walk was never one of them.</p>
+          <p><strong>Cause.</strong> Each step moved the piece with <code>setPieces(current =&gt; ({ ...current, [id]: path[i] }))</code> and then incremented <code>i</code>. React does not run that updater at the moment it is called; it runs it later, during the render. By then <code>i</code> had already advanced, so every step drew the <em>next</em> square. The final step read <code>path[length]</code>, which is <code>undefined</code>, and the piece fell back to the authoritative position from the synchronised state — which happened to be the correct square. That fallback is exactly why the destination always looked right and the fault stayed hidden.</p>
+          <p><strong>Fix.</strong> Read the square into a <code>const</code> before calling the updater, fixing the value at call time rather than at render time. The wider lesson is that a React state updater is a deferred callback, and must never close over a variable that is about to change. It is also a reminder that a defect can be masked by a correct-looking end state: only recording every intermediate frame revealed it.</p>
         </div>
 
         <h3>Known limitations</h3>

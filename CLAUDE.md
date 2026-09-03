@@ -109,7 +109,7 @@ with no real consumer** — a marker spots decoration immediately.
 
 | Requirement | Where it does real work |
 | --- | --- |
-| OOP | `MonopolyRoom extends Room`; `Player`/`Property`/`Trade`/`GameState extends Schema`; 41 private members |
+| OOP | `MonopolyRoom extends Room`; `Player`/`Property`/`Trade`/`GameState extends Schema`; 44 private members |
 | Circular linked list | The board — `BoardGraph.ts`. Movement follows `next` pointers; passing GO falls out of the walk |
 | Linked list | Hash table collision chains |
 | Circular queue | Turn order — rotate on every turn end |
