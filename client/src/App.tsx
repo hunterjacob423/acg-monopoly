@@ -10,7 +10,7 @@ import type { Snapshot } from "./types";
 
 export function App() {
   const {
-    state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice,
+    state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice, settling,
     createGame, joinGame, send, selfId, room, clearError,
   } = useGame();
 
@@ -32,7 +32,7 @@ export function App() {
       {state.phase === "lobby"
         ? <Lobby state={state} selfId={selfId} send={send} />
         : <Board state={state} pieces={pieces} card={card} dice={dice} onDismissCard={dismissCard} />}
-      <Sidebar state={state} selfId={selfId} send={send} />
+      <Sidebar state={state} selfId={selfId} send={send} settling={settling} />
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
@@ -195,8 +195,10 @@ function Lobby({ state, selfId, send }: {
   );
 }
 
-function Sidebar({ state, selfId, send }: {
+function Sidebar({ state, selfId, send, settling }: {
   state: Snapshot; selfId: string; send: (t: string, p?: unknown) => void;
+  /** True while the dice are still in the air or a piece is still walking. */
+  settling: boolean;
 }) {
   const [tradeOpen, setTradeOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
@@ -241,7 +243,13 @@ function Sidebar({ state, selfId, send }: {
             )}
           </>
         )}
-        {myTurn && state.phase === "deciding" && (
+        {/*
+          Held back until the piece has actually arrived. The server decides you
+          have landed on a buyable square in the same tick that it starts the
+          walk, so without the guard the offer appears — naming a square you can
+          see you are not on yet — while the piece is still several squares away.
+        */}
+        {myTurn && state.phase === "deciding" && !settling && (
           <>
             <button onClick={() => send("buy")}>
               Buy {BOARD[state.pendingPurchase]?.name} — £{BOARD[state.pendingPurchase]?.price}

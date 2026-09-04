@@ -80,6 +80,19 @@ export function useGame() {
   const rollingDice = useRef(false);
   const diceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * True from the throw of the dice until the piece has finished arriving.
+   *
+   * A state value rather than a read of the refs above, because the interface has
+   * to re-render when it changes: the server decides a player has landed on a
+   * buyable square in the same tick that it starts the walk, so without this the
+   * offer to buy appears while the piece is still several squares away.
+   */
+  const [settling, setSettling] = useState(false);
+  const syncSettling = useCallback(() => {
+    setSettling(rollingDice.current || animating.current || moveQueue.current.length > 0);
+  }, []);
+
   /** Plays queued moves one at a time, so two of them never animate on top of each other. */
   const drain = useCallback<() => void>(() => {
     // The dice are thrown before the piece moves, and the server sends them in
@@ -89,10 +102,12 @@ export function useGame() {
     const next = moveQueue.current.shift();
     if (!next) {
       setPieces({});
+      syncSettling();
       return;
     }
 
     animating.current = true;
+    syncSettling();
     const path = next.steps === 0 ? [next.to] : walkPath(next.from, next.steps);
     const settle = next.steps === 0 ? JUMP_MS : STEP_MS;
 
@@ -111,7 +126,7 @@ export function useGame() {
     // rather than the piece appearing already part-way along.
     setPieces((current) => ({ ...current, [next.playerId]: next.from }));
     setTimeout(step, 16);
-  }, []);
+  }, [syncSettling]);
 
   /**
    * The card currently face up. Queued rather than shown directly, because two can
@@ -157,6 +172,7 @@ export function useGame() {
   const throwDice = useCallback((e: DiceEvent) => {
     if (diceTimer.current) clearTimeout(diceTimer.current);
     rollingDice.current = true;
+    syncSettling();
     setDice({ die1: e.die1, die2: e.die2, rolling: true });
     diceTimer.current = setTimeout(() => {
       diceTimer.current = null;
@@ -164,7 +180,7 @@ export function useGame() {
       setDice({ die1: e.die1, die2: e.die2, rolling: false });
       drain();
     }, DICE_MS);
-  }, [drain]);
+  }, [drain, syncSettling]);
 
   // Ask the server whether a passcode is needed, so we never show a box nobody can fill in.
   useEffect(() => {
@@ -196,6 +212,7 @@ export function useGame() {
       */
       setPieces((current) =>
         current[m.playerId] === undefined ? { ...current, [m.playerId]: m.from } : current);
+      syncSettling();
       drain();
     });
     joined.onMessage("dice", (m: DiceEvent) => throwDice(m));
@@ -213,11 +230,12 @@ export function useGame() {
       setPieces({});
       setCard(null);
       setDice(null);
+      setSettling(false);
       setRoom(null);
       setState(null);
     });
     setRoom(joined);
-  }, [drain, showCard, throwDice]);
+  }, [drain, showCard, throwDice, syncSettling]);
 
   // A page refresh mid-game rejoins the same seat rather than losing it.
   useEffect(() => {
@@ -281,7 +299,7 @@ export function useGame() {
   }, [room]);
 
   return {
-    room, state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice,
+    room, state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice, settling,
     createGame, joinGame, send, clearError: () => setError(null),
     selfId: room?.sessionId ?? "",
   };

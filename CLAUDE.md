@@ -63,6 +63,13 @@ before anything that moves a piece, and the client holds its move queue while th
 throw is in the air. Messages arrive in the order they were sent, so that is all
 the ordering it takes — no clocks, no timestamps.
 
+`useGame` exposes `settling` — true from the throw until the piece has finished
+arriving — and the sidebar holds the offer to buy behind it. The server decides
+you have landed on a buyable square in the *same tick* that it starts the walk,
+so without that guard the offer appears naming a square you can plainly see you
+are not on yet. It has to be state rather than a read of the refs, or the
+interface never re-renders when it clears.
+
 There is a trap here worth remembering: a piece with nothing animating is drawn
 at its *authoritative* position, which the server advances immediately. Delaying
 the walk therefore made the piece jump to its destination and snap back. The fix
