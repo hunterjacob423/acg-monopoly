@@ -50,6 +50,20 @@ export class Trade extends Schema {
   @type("int32") requestMoney = 0;
 }
 
+/**
+ * One line of player chat. In the synced schema rather than a plain broadcast so
+ * that a refresh or a reconnect does not lose the conversation, exactly as the
+ * event log does not lose itself.
+ */
+export class ChatLine extends Schema {
+  /** sessionId of the sender. Kept so the client can colour the name. */
+  @type("string") id = "";
+  /** Copied at the time of speaking, so a line still has a name behind it after
+   *  the player has left and their Player record is gone. */
+  @type("string") name = "";
+  @type("string") text = "";
+}
+
 export class GameState extends Schema {
   @type("string") roomCode = "";
   /** "lobby" | "rolling" | "deciding" | "acting" | "ended" */
@@ -77,6 +91,9 @@ export class GameState extends Schema {
 
   /** Rolling log, newest last, capped at 40 entries. */
   @type(["string"]) log = new ArraySchema<string>();
+
+  /** Player chat, newest last, capped at 50 lines. */
+  @type([ChatLine]) chat = new ArraySchema<ChatLine>();
 
   get currentPlayerId(): string {
     return this.turnOrder[this.currentTurn] ?? "";

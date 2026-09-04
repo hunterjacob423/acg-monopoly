@@ -10,7 +10,7 @@ import type { PropertyView, Snapshot } from "./types";
  * definition, exactly as a real card lists them — deliberately NOT a computed
  * "what you would owe right now", which stays the server's business.
  */
-function rentRows(tile: number): Array<{ label: string; value: string; houses?: number }> {
+export function rentRows(tile: number): Array<{ label: string; value: string; houses?: number }> {
   const def = BOARD[tile];
 
   if (def.kind === "station") {

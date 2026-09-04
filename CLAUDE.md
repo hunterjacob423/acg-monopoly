@@ -25,7 +25,7 @@ Two things drive every decision:
 ```bash
 npm install                    # after cloning or a package.json change; also installs client/
 npm run build && npm start     # compile everything, serve on http://localhost:2567
-npm test                       # 88 tests, under a second
+npm test                       # 95 tests, under a second
 npm run dev                    # server with reload  ┐ hot-reload mode,
 npm run dev:client             # client on :5173     ┘ FOR THE DEVELOPER ONLY
 ```
@@ -57,6 +57,18 @@ client/src/                 React client
 `proposeTrade`); the server validates and mutates. Never move a rule to the client.
 Card decks live on the Room instance, not in the schema, so no client can read the
 next card.
+
+**The dice are thrown before the piece moves.** `handleRoll` broadcasts `dice`
+before anything that moves a piece, and the client holds its move queue while the
+throw is in the air. Messages arrive in the order they were sent, so that is all
+the ordering it takes — no clocks, no timestamps.
+
+There is a trap here worth remembering: a piece with nothing animating is drawn
+at its *authoritative* position, which the server advances immediately. Delaying
+the walk therefore made the piece jump to its destination and snap back. The fix
+is that `move` pins the piece to the square it is leaving **when the message
+arrives**, not when its animation starts. Anything that delays an animation
+further has to respect the same rule.
 
 **Every position change goes through `setPosition`**, which broadcasts a `move`
 message so clients can animate the walk tile by tile. That broadcast is
@@ -145,6 +157,20 @@ bounded FIFO queue that the client renders reversed. This was documented wrongly
 do not reintroduce the error.
 
 ---
+
+## Chat
+
+Player chat is in the synced schema (`ChatLine`, capped at 50) rather than a
+broadcast, so a refresh does not lose the conversation — the same reasoning as
+the event log. `shared/chat.ts` holds the cleaning as a pure function, imported
+by both sides so the input's `maxLength` and the server's cut cannot drift.
+
+It collapses whitespace (one message stays one line), strips control and
+zero-width and bidi characters, cuts at 200 characters, and allows one message
+every 600ms per player. **There is deliberately no word filter** — nothing here
+judges what a message says. Hunter runs the room and can see everything in it.
+If that ever needs to change, it is a conversation to have first, not a regex to
+add quietly.
 
 ## Conventions
 

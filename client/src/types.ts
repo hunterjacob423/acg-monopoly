@@ -15,6 +15,9 @@ export interface TradeView {
   offerMoney: number; requestMoney: number;
 }
 
+/** One line of chat. `id` is the sender's sessionId, for colouring their name. */
+export interface ChatLineView { id: string; name: string; text: string }
+
 export interface Snapshot {
   roomCode: string;
   phase: "lobby" | "rolling" | "deciding" | "acting" | "ended";
@@ -27,4 +30,5 @@ export interface Snapshot {
   winnerId: string;
   trades: Record<string, TradeView>;
   log: string[];
+  chat: ChatLineView[];
 }

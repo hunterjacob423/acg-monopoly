@@ -21,7 +21,15 @@ export function newRoomCode(): string {
 const STEP_MS = 150;
 const JUMP_MS = 420;
 
+/**
+ * How long the dice tumble before showing their real faces. The piece does not
+ * set off until this is over, so it is suspense rather than dead time.
+ */
+const DICE_MS = 900;
+
 export interface MoveEvent { playerId: string; from: number; to: number; steps: number }
+export interface DiceEvent { playerId: string; die1: number; die2: number }
+export interface DiceView { die1: number; die2: number; rolling: boolean }
 export interface CardEvent { deck: "chance" | "chest"; playerId: string; text: string }
 
 /**
@@ -62,8 +70,21 @@ export function useGame() {
   const moveQueue = useRef<MoveEvent[]>([]);
   const animating = useRef(false);
 
+  /**
+   * The dice as drawn. Null until this client has seen a roll, and the board then
+   * falls back to the synced values — so joining or refreshing mid-game shows the
+   * last roll rather than a blank space.
+   */
+  const [dice, setDice] = useState<DiceView | null>(null);
+  /** True while the dice are in the air, which holds the move queue. */
+  const rollingDice = useRef(false);
+  const diceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   /** Plays queued moves one at a time, so two of them never animate on top of each other. */
   const drain = useCallback<() => void>(() => {
+    // The dice are thrown before the piece moves, and the server sends them in
+    // that order, so holding here is all it takes to keep the two in step.
+    if (rollingDice.current) return;
     if (animating.current) return;
     const next = moveQueue.current.shift();
     if (!next) {
@@ -132,6 +153,19 @@ export function useGame() {
   /** Dismissing moves on to the next queued card, or clears the last one. */
   const dismissCard = useCallback(() => nextCard(), [nextCard]);
 
+  /** Throws the dice, then releases whatever move was waiting on them. */
+  const throwDice = useCallback((e: DiceEvent) => {
+    if (diceTimer.current) clearTimeout(diceTimer.current);
+    rollingDice.current = true;
+    setDice({ die1: e.die1, die2: e.die2, rolling: true });
+    diceTimer.current = setTimeout(() => {
+      diceTimer.current = null;
+      rollingDice.current = false;
+      setDice({ die1: e.die1, die2: e.die2, rolling: false });
+      drain();
+    }, DICE_MS);
+  }, [drain]);
+
   // Ask the server whether a passcode is needed, so we never show a box nobody can fill in.
   useEffect(() => {
     fetch(`${httpBase}/config`)
@@ -147,7 +181,24 @@ export function useGame() {
     joined.onStateChange((next: any) => setState(next.toJSON() as Snapshot));
     joined.onMessage("error", (m: { message: string }) => setToast(m.message));
     joined.onMessage("card", (m: CardEvent) => showCard(m));
-    joined.onMessage("move", (m: MoveEvent) => { moveQueue.current.push(m); drain(); });
+    joined.onMessage("move", (m: MoveEvent) => {
+      moveQueue.current.push(m);
+      /*
+        Pin the piece to the square it is leaving, straight away and even though
+        the animation may not start for another second while the dice are in the
+        air. The board falls back to the authoritative position whenever a player
+        is absent from `pieces`, and the server has already advanced that — so
+        without this the piece jumps to its destination the moment the state
+        patch lands, then snaps back to walk there properly.
+
+        Only when nothing of theirs is already drawn: a piece part-way through an
+        earlier move must not be yanked backwards by the next one queueing up.
+      */
+      setPieces((current) =>
+        current[m.playerId] === undefined ? { ...current, [m.playerId]: m.from } : current);
+      drain();
+    });
+    joined.onMessage("dice", (m: DiceEvent) => throwDice(m));
     joined.onLeave(() => {
       sessionStorage.removeItem(STORAGE_KEY);
       moveQueue.current = [];
@@ -156,13 +207,17 @@ export function useGame() {
       cardBusy.current = false;
       if (cardTimer.current) clearTimeout(cardTimer.current);
       cardTimer.current = null;
+      if (diceTimer.current) clearTimeout(diceTimer.current);
+      diceTimer.current = null;
+      rollingDice.current = false;
       setPieces({});
       setCard(null);
+      setDice(null);
       setRoom(null);
       setState(null);
     });
     setRoom(joined);
-  }, [drain, showCard]);
+  }, [drain, showCard, throwDice]);
 
   // A page refresh mid-game rejoins the same seat rather than losing it.
   useEffect(() => {
@@ -226,7 +281,7 @@ export function useGame() {
   }, [room]);
 
   return {
-    room, state, error, toast, busy, passcodeRequired, pieces, card, dismissCard,
+    room, state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice,
     createGame, joinGame, send, clearError: () => setError(null),
     selfId: room?.sessionId ?? "",
   };

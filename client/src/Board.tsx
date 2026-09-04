@@ -3,7 +3,9 @@ import { BOARD, GROUP_COLOURS, type ColourGroup } from "@shared/board";
 import { locationImage } from "@shared/locations";
 import { tokenGlyph } from "@shared/tokens";
 import { DeckCard, DeckPiles } from "./DeckCard";
-import type { CardEvent } from "./useGame";
+import { Dice } from "./Dice";
+import { TileDetails } from "./TileDetails";
+import type { CardEvent, DiceView } from "./useGame";
 import type { Snapshot } from "./types";
 
 /**
@@ -65,13 +67,16 @@ function storedZoom(): number {
   return 1;
 }
 
-export function Board({ state, pieces, card, onDismissCard }: {
+export function Board({ state, pieces, card, dice, onDismissCard }: {
   state: Snapshot;
   pieces: Record<string, number>;
   card: CardEvent | null;
+  dice: DiceView | null;
   onDismissCard: () => void;
 }) {
   const [zoom, setZoom] = useState(storedZoom);
+  /** The square whose details are open, or null. Read-only: see TileDetails. */
+  const [inspecting, setInspecting] = useState<number | null>(null);
 
   const changeZoom = (by: number) => {
     // Rounded because repeated adding of .15 drifts (0.8 + .15 + .15 is not 1.1),
@@ -107,11 +112,13 @@ export function Board({ state, pieces, card, onDismissCard }: {
         const photo = locationImage(tile.image);
 
         return (
-          <div
+          <button
             key={tile.index}
+            type="button"
             className="tile"
             style={cell(tile.index)}
-            title={tile.blurb ? `${tile.name} — ${tile.blurb}` : tile.name}
+            title={`${tile.name} — click for details`}
+            onClick={() => setInspecting(tile.index)}
           >
             {tile.group && (
               <div className="tile-band" style={{ background: GROUP_COLOURS[tile.group as ColourGroup] }} />
@@ -137,7 +144,7 @@ export function Board({ state, pieces, card, onDismissCard }: {
             ) : null}
             {prop?.mortgaged && <div className="tile-mortgaged">MTG</div>}
             {owner && <div className="tile-owner" style={{ background: owner.colour }} />}
-          </div>
+          </button>
         );
       })}
 
@@ -174,11 +181,11 @@ export function Board({ state, pieces, card, onDismissCard }: {
       <div className="board-centre">
         <h1>MONOPOLY</h1>
         <div className="room-code">Room {state.roomCode}</div>
-        {state.die1 > 0 && (
-          <div className="dice">
-            <span>{state.die1}</span><span>{state.die2}</span>
-          </div>
-        )}
+        <Dice
+          die1={dice?.die1 ?? state.die1}
+          die2={dice?.die2 ?? state.die2}
+          rolling={dice?.rolling ?? false}
+        />
 
         <DeckPiles drawing={card?.deck ?? null} />
 
@@ -186,6 +193,8 @@ export function Board({ state, pieces, card, onDismissCard }: {
         <DeckCard card={card} state={state} onDismiss={onDismissCard} />
       </div>
       </div>
+
+      <TileDetails tile={inspecting} state={state} onClose={() => setInspecting(null)} />
     </div>
   );
 }

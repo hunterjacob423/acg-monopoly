@@ -5,11 +5,12 @@ import { Board } from "./Board";
 import { useGame } from "./useGame";
 import { TradeBuilder, TradeInbox } from "./Trade";
 import { PropertyHand } from "./PropertyCards";
+import { Chat } from "./Chat";
 import type { Snapshot } from "./types";
 
 export function App() {
   const {
-    state, error, toast, busy, passcodeRequired, pieces, card, dismissCard,
+    state, error, toast, busy, passcodeRequired, pieces, card, dismissCard, dice,
     createGame, joinGame, send, selfId, room, clearError,
   } = useGame();
 
@@ -30,7 +31,7 @@ export function App() {
     <div className="app">
       {state.phase === "lobby"
         ? <Lobby state={state} selfId={selfId} send={send} />
-        : <Board state={state} pieces={pieces} card={card} onDismissCard={dismissCard} />}
+        : <Board state={state} pieces={pieces} card={card} dice={dice} onDismissCard={dismissCard} />}
       <Sidebar state={state} selfId={selfId} send={send} />
       {toast && <div className="toast">{toast}</div>}
     </div>
@@ -292,6 +293,8 @@ function Sidebar({ state, selfId, send }: {
       <section className="log">
         {state.log.slice(-14).reverse().map((line, i) => <div key={i}>{line}</div>)}
       </section>
+
+      <Chat state={state} selfId={selfId} send={send} />
 
       <PropertyHand
         state={state}

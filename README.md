@@ -176,7 +176,7 @@ turn state machine, algorithm analysis and the test plan — is in
 npm test
 ```
 
-88 tests covering every structure, the rent and building rules, board movement, and
+95 tests covering every structure, the rent and building rules, board movement, and
 trading, and the leaderboard's file handling. Written with Node's built-in test runner, so there
 is no test framework dependency.
 

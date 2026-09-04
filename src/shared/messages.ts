@@ -30,6 +30,8 @@ export interface ClientMessages {
   searchProperty: { query: string };
   /** Claim a playing piece in the lobby; refused if someone already has it. */
   chooseToken: { token: string };
+  /** Say something to the room. Cleaned and rate-limited by the server. */
+  chat: { text: string };
 }
 
 export type ClientMessageType = keyof ClientMessages;
@@ -50,6 +52,13 @@ export interface ServerMessages {
    * walk around the board and 0 for a jump (a card teleport, or going to jail).
    */
   move: { playerId: string; from: number; to: number; steps: number };
+  /**
+   * The dice were thrown. Sent BEFORE any `move` that results from them, so a
+   * client can hold the piece still until the tumble finishes. The values are
+   * also in the synced state; this exists purely to mark the moment, and to
+   * order the two animations.
+   */
+  dice: { playerId: string; die1: number; die2: number };
 }
 
 /** Join options, validated in onAuth/onJoin. */

@@ -442,6 +442,8 @@
                             derived from them — imported by BOTH sides
     locations.ts            every square's name and picture — the single file
                             edited to re-theme the board
+    chat.ts                 cleaning and limits for player chat — imported by
+                            BOTH sides so the box and the server agree
     tokens.ts               the six playing pieces — imported by BOTH sides
     messages.ts             the complete vocabulary, in both directions
 
@@ -451,6 +453,9 @@ client/src/
   App.tsx, Board.tsx        entry screen, lobby, board, sidebar
   PropertyCards.tsx         title deed cards for the property a player owns
   DeckCard.tsx              the two draw piles and the card drawn from them
+  Dice.tsx                  the pair of dice, and the throw animation
+  TileDetails.tsx           the panel opened by clicking any square
+  Chat.tsx                  the room chat panel
   types.ts                  plain-object view of the server schema
 client/public/locations/    the picture for each square, served as static files</pre>
 
@@ -614,6 +619,11 @@ client/public/locations/    the picture for each square, served as static files<
         </div>
         <p>Offers are synced so both parties can see the terms. They are removed when accepted, rejected, withdrawn, or when either player leaves or goes bankrupt.</p>
 
+        <h3>Chat</h3>
+        <p>A chat line is <code>{ id, name, text }</code>, held in the synchronised state rather than sent as a plain broadcast so that a refresh or a reconnection does not lose the conversation — the same reasoning as the event log. The sender's name is copied at the time of speaking, so a line still has a name behind it after that player has left and their <code>Player</code> record is gone. The list is capped at 50 lines.</p>
+
+        <p>Everything a client sends is untrusted, so the text is cleaned by a pure function before it is stored: all whitespace collapses to single spaces, which keeps one message to one line and stops a player pushing everyone else's chat off the screen with newlines; control codes, zero-width characters and the bidirectional overrides are stripped, since they render as nothing but can hide text or visually reverse what follows; and anything over 200 characters is cut rather than refused. A player may send one message every 600&nbsp;ms. There is deliberately no word filter — nothing in the program judges what a message says, which is a matter for whoever is running the room, who can see every message in it.</p>
+
         <h3>Static board data</h3>
         <p>The 40 squares are constant and therefore not part of the synchronised state — both sides import them from <code>shared/board.ts</code>. Only the 28 ownable squares get a <code>Property</code> record.</p>
 
@@ -662,6 +672,7 @@ client/public/locations/    the picture for each square, served as static files<
               <tr><td class="id">cancelTrade</td><td class="ty">{ tradeId }</td><td>Sender is the proposer</td></tr>
               <tr><td class="id">searchProperty</td><td class="ty">{ query }</td><td>None; answered from the BST index with at most 12 matches</td></tr>
               <tr><td class="id">chooseToken</td><td class="ty">{ token }</td><td>Phase is <code>lobby</code>; the id names a real piece; no other player already holds it</td></tr>
+              <tr><td class="id">chat</td><td class="ty">{ text }</td><td>Sender is in the room; the text survives cleaning (see below); at least 600&nbsp;ms since that player's last message. Allowed in every phase, and to bankrupt players</td></tr>
             </tbody>
           </table>
         </div>
@@ -679,9 +690,12 @@ client/public/locations/    the picture for each square, served as static files<
               <tr><td class="id">propertyResults</td><td class="ty">{ tiles }</td><td>one client</td><td>Answers <code>searchProperty</code> from the BST index</td></tr>
               <tr><td class="id">card</td><td class="ty">{ deck, playerId, text }</td><td>everyone</td><td>A Chance or Community Chest card was drawn. Broadcast so the whole table watches it, as they would across a real board. Only the drawn card is sent — never the order of the deck behind it</td></tr>
               <tr><td class="id">move</td><td class="ty">{ playerId, from, to, steps }</td><td>everyone</td><td>A piece moved, so clients can walk it square by square. <code>steps</code> is signed for a walk and 0 for a jump</td></tr>
+              <tr><td class="id">dice</td><td class="ty">{ playerId, die1, die2 }</td><td>everyone</td><td>The dice were thrown. Sent <em>before</em> any <code>move</code> they cause, which is what lets a client hold the piece still until the throw has finished</td></tr>
             </tbody>
           </table>
         </div>
+
+        <p>The <code>dice</code> message is redundant as data — both values are in the synchronised state — and exists only to mark the moment and to order the two animations. Messages arrive in the order they were sent, so a client that holds its move queue while the dice are in the air will always finish the throw before the piece sets off, without either side needing a clock. This produced the one defect worth recording from the animation work: because a piece with nothing animating is drawn at its authoritative position, and the server advances that immediately, delaying the walk by the length of the throw made the piece jump to its destination and then snap back to walk there. The fix is to pin the piece to the square it is leaving the moment the <code>move</code> arrives, rather than when its animation begins.</p>
 
         <p>The <code>move</code> message needs justifying, since <code>position</code> is already synchronised and a client could in principle just watch it change. It cannot do so reliably. A roll that lands on Chance and is then moved on by the card changes <code>position</code> twice inside a single server tick, and the client receives only the final value — it has no way to tell that apart from one long walk. Rather than have the client guess, the server states what happened. The synchronised <code>position</code> remains the authority: whenever no animation is running each piece is drawn at it, so a lost message or a reconnection corrects itself rather than stranding a piece.</p>
 
@@ -1001,10 +1015,10 @@ client/public/locations/    the picture for each square, served as static files<
         <p>Tests run with <code>npm test</code>, using Node's built-in test runner so the project carries no test framework dependency. All figures below are from the current run.</p>
 
         <div class="stats">
-          <div class="stat"><div class="v">88</div><div class="k">Tests</div></div>
-          <div class="stat"><div class="v">88</div><div class="k">Passing</div></div>
+          <div class="stat"><div class="v">95</div><div class="k">Tests</div></div>
+          <div class="stat"><div class="v">95</div><div class="k">Passing</div></div>
           <div class="stat"><div class="v">0</div><div class="k">Failing</div></div>
-          <div class="stat"><div class="v">111<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
+          <div class="stat"><div class="v">114<span style="font-size:15px">ms</span></div><div class="k">Duration</div></div>
         </div>
 
         <div class="tw">
@@ -1035,6 +1049,11 @@ client/public/locations/    the picture for each square, served as static files<
                 <td class="id">tokens</td><td class="num">6</td>
                 <td>At least as many playing pieces exist as the room admits players, so nobody can be left without one; piece ids are unique; an unrecognised id is rejected; the first unclaimed piece skips those already taken; a piece is still returned when every one is taken; an unrecognised id falls back to a visible glyph rather than drawing nothing</td>
                 <td><span class="pill">6 pass</span></td>
+              </tr>
+              <tr>
+                <td class="id">chat</td><td class="num">7</td>
+                <td>An ordinary message passes through untouched; trimming, and an empty message stored as nothing; a message typed across several lines collapsing to one; control codes, zero-width characters, bidirectional overrides and the byte-order mark stripped; an overlong message cut to 200 characters rather than refused; anything that is not a string treated as nothing, since a modified client may send anything; accents and emoji surviving</td>
+                <td><span class="pill">7 pass</span></td>
               </tr>
               <tr>
                 <td class="id">locations</td><td class="num">6</td>

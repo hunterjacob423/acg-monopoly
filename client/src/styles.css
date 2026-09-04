@@ -116,7 +116,17 @@ button.secondary { background: transparent; color: var(--accent);
     since those are computed from a square. The names are clipped instead.
   */
   min-width: 0; min-height: 0;
-  font-size: clamp(10px, 1.35cqw, 17px); line-height: 1.15; }
+  font-size: clamp(10px, 1.35cqw, 17px); line-height: 1.15;
+  /*
+    A square is a <button> so it can be clicked for details from the keyboard as
+    well as the mouse. That means undoing the global button skin, which would
+    otherwise paint all forty of them accent-blue with centred bold text.
+  */
+  appearance: none; -webkit-appearance: none;
+  color: inherit; text-align: left; font-weight: 400; font-family: inherit;
+  cursor: pointer; }
+.tile:hover { border-color: #52607a; }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tile-band { flex: 0 0 auto; height: .7em; margin: -3px -3px 0; }
 
 /*
@@ -206,11 +216,33 @@ button.secondary { background: transparent; color: var(--accent);
 .board-centre h1 { letter-spacing: .3em; margin: 0;
   font-size: clamp(11px, 3.2cqw, 34px); white-space: nowrap; }
 .room-code { color: var(--muted); font-size: clamp(9px, 1.6cqw, 17px); }
-.dice { display: flex; gap: .9cqw; }
-.dice span { width: clamp(18px, 3.9cqw, 42px); height: clamp(18px, 3.9cqw, 42px);
-  display: grid; place-items: center;
-  background: #fff; color: #111; border-radius: 6px;
-  font-size: clamp(11px, 2.3cqw, 25px); font-weight: 700; }
+.dice { display: flex; gap: 1.1cqw; }
+.die {
+  width: clamp(20px, 4.4cqw, 48px); height: clamp(20px, 4.4cqw, 48px);
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  gap: 6%; padding: 11%;
+  background: #fbfbf8; border-radius: 16%;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .55), inset 0 -2px 5px rgba(0, 0, 0, .13);
+}
+.pip { border-radius: 50%; background: #14171c; }
+.pip.empty { background: none; }
+
+/*
+  The tumble is deliberately a hop and a wobble rather than a spin: a spinning
+  square reads as a loading spinner, where a die that bounces reads as a throw.
+  The two dice are offset by a delay so they do not move as one block.
+*/
+.die.tumbling { animation: die-tumble .3s ease-in-out infinite; }
+@keyframes die-tumble {
+  0%   { transform: translateY(0)    rotate(0deg); }
+  25%  { transform: translateY(-22%) rotate(-13deg); }
+  50%  { transform: translateY(0)    rotate(0deg); }
+  75%  { transform: translateY(-12%) rotate(11deg); }
+  100% { transform: translateY(0)    rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .die.tumbling { animation: none; }
+}
 
 .sidebar { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .sidebar section { background: var(--panel); border: 1px solid var(--line);
@@ -472,3 +504,78 @@ button.secondary { background: transparent; color: var(--accent);
 }
 .deck-who { font-size: 9.5px; color: #5a626d; letter-spacing: .1em; text-transform: uppercase; }
 .deck-dismiss { padding: 5px 14px; font-size: 12px; }
+
+
+/* ---- square details, opened by clicking a square ---- */
+
+.info-backdrop { position: fixed; inset: 0; background: rgba(4, 6, 10, .68); z-index: 50; }
+.info-panel {
+  position: fixed; z-index: 51; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(330px, calc(100vw - 28px)); max-height: 86vh; overflow-y: auto;
+  background: #f3f0e6; color: #14171c;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+  padding-bottom: 12px;
+  animation: info-in .18s ease-out;
+}
+@keyframes info-in {
+  from { opacity: 0; transform: translate(-50%, -47%) scale(.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .info-panel { animation: none; }
+}
+
+.info-band {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 12px; border-radius: 9px 9px 0 0;
+  border-bottom: 2px solid rgba(0, 0, 0, .5);
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .65);
+}
+.info-name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.info-photo { height: 118px; background-size: cover; background-position: center;
+  border-bottom: 1px solid rgba(0, 0, 0, .25); }
+.info-body { padding: 10px 12px 0; }
+.info-blurb { margin: 0 0 8px; font-size: 12px; font-style: italic; color: #4d545d; }
+.info-what { margin: 0; font-size: 12.5px; line-height: 1.55; }
+.info-line { display: flex; justify-content: space-between; font-weight: 700;
+  padding-bottom: 7px; border-bottom: 1px solid rgba(0, 0, 0, .14); }
+.info-owner {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 10px; padding: 7px 9px; border-radius: 6px;
+  background: rgba(0, 0, 0, .07); font-size: 11.5px;
+}
+.info-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+.info-close { display: block; margin: 12px auto 0; background: #14171c; color: #f3f0e6;
+  border: 0; padding: 6px 18px; }
+
+/* ---- chat ---- */
+
+.chat { display: flex; flex-direction: column; gap: 8px; }
+.chat h3 { margin: 0; font-size: 12px; text-transform: uppercase; color: var(--muted); }
+.chat-empty { font-size: 12px; margin: 0; }
+
+/*
+  A fixed height rather than one that grows with the conversation: the sidebar is
+  a column of panels, and a chat that stretched would push the log and the
+  holdings off the bottom as soon as anyone got talkative.
+*/
+.chat-lines {
+  display: flex; flex-direction: column; gap: 5px;
+  height: 150px; overflow-y: auto;
+  padding-right: 4px; font-size: 12px; line-height: 1.35;
+}
+.chat-line { display: flex; gap: 6px; align-items: baseline; }
+.chat-who { font-weight: 700; flex: 0 0 auto; max-width: 40%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-who::after { content: ":"; }
+/* Long words — a pasted URL, or a wall of one character — must wrap rather than
+   widening the whole sidebar. */
+.chat-text { min-width: 0; overflow-wrap: anywhere; }
+.chat-line.mine .chat-text { color: var(--text); }
+.chat-line:not(.mine) .chat-text { color: #c3cddc; }
+
+.chat-box { display: flex; gap: 6px; }
+.chat-box input { flex: 1; min-width: 0; padding: 7px 9px; font-size: 12px; }
+.chat-box button { padding: 7px 12px; font-size: 12px; }

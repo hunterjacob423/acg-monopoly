@@ -1,11 +1,12 @@
 import { Room, Client, CloseCode } from "@colyseus/core";
-import { GameState, Player, Property, Trade } from "./schema/GameState";
+import { GameState, Player, Property, Trade, ChatLine } from "./schema/GameState";
 import {
   BOARD, GO_SALARY, JAIL_FINE, JAIL_INDEX, OWNABLE, STARTING_MONEY,
 } from "../shared/board";
 import type { JoinOptions } from "../shared/messages";
 import { firstFreeToken, isTokenId } from "../shared/tokens";
 import { CHANCE, COMMUNITY_CHEST, shuffle, type Card, type CardEffects } from "../game/cards";
+import { cleanChatText, CHAT_MIN_GAP_MS } from "../shared/chat";
 import { move, moveBackwards, searchByPrefix, findByName } from "../game/BoardGraph";
 import { Queue, CircularQueue } from "../structures/Queue";
 import { Stack } from "../structures/Stack";
@@ -87,6 +88,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.onMessage("cancelTrade", (client, msg: { tradeId: string }) => this.handleTradeRefusal(client, msg?.tradeId, "withdrew"));
     this.onMessage("searchProperty", (client, msg: { query: string }) => this.handleSearchProperty(client, msg?.query));
     this.onMessage("chooseToken", (client, msg: { token: string }) => this.handleChooseToken(client, msg?.token));
+    this.onMessage("chat", (client, msg: { text: string }) => this.handleChat(client, msg?.text));
   }
 
   // ---------------------------------------------------------------- join / leave
@@ -146,6 +148,7 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.log(`${player.name} left.`);
     this.state.players.delete(sessionId);
     this.playerIndex.delete(sessionId);
+    this.lastSpokeAt.delete(sessionId);
     this.clearTradesFor(sessionId);
     // Hand the host badge to whoever is left.
     if (player.isHost) {
@@ -189,6 +192,40 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     this.log(`Game started. ${this.name(this.state.currentPlayerId)} goes first.`);
   }
 
+  /**
+   * When each player last spoke, for the rate limit. A plain map on the room
+   * rather than a field on Player: it is bookkeeping, and nothing about it needs
+   * to reach the clients.
+   */
+  private lastSpokeAt = new Map<string, number>();
+
+  /**
+   * Chat is open in every phase, including the lobby and after the game has
+   * ended, and to bankrupt players — being out of the game is no reason to be
+   * unable to talk to the room.
+   */
+  private handleChat(client: Client, raw: string) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const text = cleanChatText(raw);
+    if (!text) return; // Nothing worth saying; not worth an error either.
+
+    const now = Date.now();
+    const last = this.lastSpokeAt.get(client.sessionId) ?? 0;
+    if (now - last < CHAT_MIN_GAP_MS) {
+      return this.deny(client, "One message at a time — wait a moment.");
+    }
+    this.lastSpokeAt.set(client.sessionId, now);
+
+    const line = new ChatLine();
+    line.id = player.id;
+    line.name = player.name;
+    line.text = text;
+    this.state.chat.push(line);
+    while (this.state.chat.length > 50) this.state.chat.shift();
+  }
+
   /** Pieces may only be swapped in the lobby, and no two players may share one. */
   private handleChooseToken(client: Client, token: string) {
     const player = this.state.players.get(client.sessionId);
@@ -219,6 +256,9 @@ export class MonopolyRoom extends Room<{ state: GameState }> {
     const die2 = 1 + Math.floor(Math.random() * 6);
     this.state.die1 = die1;
     this.state.die2 = die2;
+    // Before anything that moves a piece: the clients hold the piece still until
+    // the dice have settled, and messages arrive in the order they were sent.
+    this.broadcast("dice", { playerId: player.id, die1, die2 });
     const isDouble = die1 === die2;
 
     if (player.inJail) {

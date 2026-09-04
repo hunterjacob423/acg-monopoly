@@ -220,7 +220,7 @@ Two rules the tests will enforce if you break them: no two properties may share 
 npm test
 ```
 
-Compiles everything and runs all 88 tests. Takes under a second.
+Compiles everything and runs all 95 tests. Takes under a second.
 
 ---
 
